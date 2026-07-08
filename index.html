@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DDPM Landslide Dashboard — Clickable Prototype (Grafana-styled)</title>
+<style>
+/* ---------- LIGHT (default) ---------- */
+:root{
+  --bg:#f5f6f8; --bg2:#ffffff; --panel:#ffffff; --panel2:#f1f3f5; --border:#e0e3e8;
+  --text:#1b1f24; --muted:#5c636b; --faint:#9aa0a6; --accent:#3866c4; --accentbg:#e7effb;
+  --ok:#2E7D32; --warn:#c25e00; --crit:#c62828; --info:#3866c4; --blue:#2f6fd6;
+  --tok-normal:#1b5e20; --tok-watch:#8a6100; --tok-warning:#b35400; --tok-danger:#b71c1c;
+  --tok-info:#455a64; --tok-sywarn:#7a5c00; --tok-crit:#6a1b9a;
+  --green:#2E7D32; --yellow:#F9A825; --orange:#EF6C00; --red:#C62828;
+  --shadow:0 1px 2px rgba(0,0,0,.06);
+  --radius:4px; --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Sarabun","Noto Sans Thai",Roboto,Helvetica,Arial,sans-serif;
+}
+/* ---------- DARK ---------- */
+[data-theme="dark"]{
+  --bg:#0e1013; --bg2:#141619; --panel:#181b1f; --panel2:#1f2327; --border:#2a2e33;
+  --text:#d8d9da; --muted:#8e9297; --faint:#5b5f65; --accent:#3d71d9; --accentbg:#12233f;
+  --ok:#3fb950; --warn:#e6c14a; --crit:#ff6b6b; --info:#58a6ff; --blue:#58a6ff;
+  --tok-normal:#a7e0a9; --tok-watch:#ffe08a; --tok-warning:#ffc08a; --tok-danger:#ff9a9a;
+  --tok-info:#b0bec5; --tok-sywarn:#e6c14a; --tok-crit:#e0a3ee;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.45}
+a{color:var(--accent);text-decoration:none}
+button{font-family:var(--font)}
+.hidden{display:none!important}
+#app{min-height:100vh;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;gap:12px;height:52px;padding:0 16px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:40}
+.brandmark{width:26px;height:26px;border-radius:5px;background:linear-gradient(135deg,#e8632a,#f9a825);display:flex;align-items:center;justify-content:center;font-weight:800;color:#111;font-size:12px}
+.topbar .title{font-weight:600;font-size:14px}
+.topbar .title small{display:block;color:var(--muted);font-weight:400;font-size:11px}
+.topbar .spacer{flex:1}
+.live{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(63,150,80,.5)}70%{box-shadow:0 0 0 7px rgba(63,150,80,0)}100%{box-shadow:0 0 0 0 rgba(63,150,80,0)}}
+.areasel{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:6px 8px;font-size:13px}
+.usermenu{width:30px;height:30px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;font-size:12px}
+.shell{flex:1;display:flex;min-height:0}
+.nav{width:216px;background:var(--bg2);border-right:1px solid var(--border);padding:8px 0;overflow-y:auto;flex-shrink:0}
+.nav .grp{padding:10px 16px 4px;color:var(--faint);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 16px;color:var(--text);cursor:pointer;border-left:2px solid transparent;font-size:13px}
+.nav a:hover{background:var(--panel2)}
+.nav a.active{background:var(--accentbg);border-left-color:var(--accent);color:var(--accent);font-weight:600}
+.nav .ico{width:16px;text-align:center;color:var(--muted);font-size:13px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.content{flex:1;padding:16px;overflow-y:auto}
+.annot{display:flex;align-items:center;gap:10px;padding:7px 16px;background:var(--bg2);border-top:1px solid var(--border);font-size:11px;color:var(--muted);flex-wrap:wrap}
+.annot .tor{color:var(--accent);background:var(--accentbg);border:1px solid var(--border);padding:2px 7px;border-radius:10px}
+.feas{padding:2px 7px;border-radius:10px;border:1px solid var(--border)}
+.feas.native{color:var(--ok);border-color:var(--ok)}
+.feas.alerting{color:var(--warn);border-color:var(--warn)}
+.feas.custom{color:var(--orange);border-color:var(--orange)}
+.toggle{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.toggle button{background:var(--panel);color:var(--muted);border:0;padding:5px 9px;cursor:pointer;font-size:12px;border-right:1px solid var(--border)}
+.toggle button:last-child{border-right:0}
+.toggle button.on{background:var(--accent);color:#fff}
+.pagehead{display:flex;align-items:baseline;gap:12px;margin:0 0 14px;flex-wrap:wrap}
+.pagehead h1{font-size:18px;font-weight:600;margin:0}
+.pagehead .sub{color:var(--muted);font-size:12px}
+.grid{display:grid;gap:12px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+.panel .ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);font-weight:600}
+.panel .pb{padding:12px}
+.kpi .v{font-size:30px;font-weight:700;line-height:1}
+.kpi .l{color:var(--muted);font-size:12px;margin-top:4px}
+.kpi .v.warn{color:var(--warn)} .kpi .v.crit{color:var(--crit)} .kpi .v.ok{color:var(--ok)}
+.areacards{grid-template-columns:repeat(auto-fit,minmax(255px,1fr))}
+.areacard{cursor:pointer;transition:border-color .15s}
+.areacard:hover{border-color:var(--accent)}
+.areacard .pb{display:flex;flex-direction:column;gap:8px}
+.arow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.aname{font-weight:600}.aprov{color:var(--muted);font-size:12px}
+.mini{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden}
+.mini > i{display:block;height:100%;background:var(--ok)}
+.tok{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap;border:1px solid transparent}
+.tok .g{font-size:11px}
+.tok.normal{color:var(--tok-normal);background:rgba(46,125,50,.14);border-color:var(--green)}
+.tok.watch{color:var(--tok-watch);background:rgba(249,168,37,.16);border-color:var(--yellow)}
+.tok.warning{color:var(--tok-warning);background:rgba(239,108,0,.14);border-color:var(--orange)}
+.tok.danger{color:var(--tok-danger);background:rgba(198,40,40,.14);border-color:var(--red)}
+.tok.info{color:var(--tok-info);background:rgba(96,125,139,.14);border-color:#607D8B}
+.tok.sywarning{color:var(--tok-sywarn);background:rgba(181,137,0,.14);border-color:#B58900}
+.tok.critical{color:var(--tok-crit);background:rgba(142,36,170,.14);border-color:#8E24AA}
+.action{color:var(--muted);font-size:11px}
+.chip{display:inline-block;padding:1px 7px;border-radius:8px;font-size:11px;border:1px solid var(--border);color:var(--muted)}
+.chip.cap{color:var(--crit);border-color:var(--crit)}
+.c-ok{color:var(--ok)}.c-warn{color:var(--warn)}.c-crit{color:var(--crit)}.c-info{color:var(--info)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+tr:hover td{background:var(--panel2)}
+.status{display:inline-flex;align-items:center;gap:6px}
+.sdot{width:8px;height:8px;border-radius:50%}
+.sdot.online{background:var(--ok)}.sdot.offline{background:var(--crit)}
+.tiles{grid-template-columns:repeat(auto-fill,minmax(212px,1fr))}
+.tile .pb{display:flex;flex-direction:column;gap:8px}
+.tile .tname{font-weight:600;font-size:13px}
+.tile .tid{color:var(--faint);font-size:11px}
+.metric{display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.metric .mv{font-weight:600}
+.bar{height:5px;background:var(--panel2);border-radius:3px;overflow:hidden;flex:1;margin:0 8px}
+.bar > i{display:block;height:100%}
+.sig{display:inline-flex;gap:2px;align-items:flex-end;height:14px}
+.sig > i{width:3px;background:var(--faint);border-radius:1px}
+.sig > i.on{background:var(--ok)}
+.btn{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:7px 13px;font-size:13px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.sm{padding:4px 9px;font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.seg button{background:var(--panel);color:var(--muted);border:0;padding:6px 12px;cursor:pointer;font-size:13px;border-right:1px solid var(--border)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--accent);color:#fff}
+input,select{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:13px}
+label.fld{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.tabs{display:flex;gap:2px;margin-bottom:12px}
+.tabs button{background:var(--panel);color:var(--muted);border:1px solid var(--border);border-bottom:0;border-radius:var(--radius) var(--radius) 0 0;padding:8px 14px;cursor:pointer;font-size:13px}
+.tabs button.on{background:var(--panel2);color:var(--text)}
+.mailflag{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--ok)}
+.mailflag.no{color:var(--faint)}
+.login-wrap{flex:1;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+.login-card{width:360px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:28px;box-shadow:0 12px 40px rgba(0,0,0,.12)}
+.login-card h2{margin:6px 0 2px;font-size:18px}
+.login-card p.s{color:var(--muted);font-size:12px;margin:0 0 18px}
+.login-card label.fld{margin-bottom:12px}
+.login-card .btn{width:100%;justify-content:center;text-align:center}
+.login-top{display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px}
+.badge-native{font-size:10px;color:var(--ok);border:1px solid var(--ok);border-radius:8px;padding:1px 6px;margin-left:8px}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:420px;max-width:92vw;background:var(--bg2);border-left:1px solid var(--border);z-index:61;display:flex;flex-direction:column}
+.drawer .dh{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border)}
+.drawer .db{padding:16px;overflow-y:auto}
+.step{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.step .n{width:24px;height:24px;flex-shrink:0;border-radius:50%;background:var(--accentbg);border:1px solid var(--accent);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.mapwrap{position:relative;background:#0b1a14;border-radius:var(--radius);overflow:hidden}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:10px 0 0;color:var(--muted);font-size:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.note{color:var(--faint);font-size:11px;margin-top:6px}
+.wall{position:fixed;inset:0;background:#000;z-index:80;color:#fff;padding:28px;display:flex;flex-direction:column;gap:18px}
+.wall h1{font-size:32px;margin:0}
+.wall .wtop{display:flex;justify-content:space-between;align-items:center}
+.wall .wgrid{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.wall .wcard{border:2px solid #333;border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:10px;background:#0a0a0a}
+.wall .wname{font-size:28px;font-weight:700}
+.wall .wtok{font-size:24px;font-weight:800;padding:8px 16px;border-radius:12px;display:inline-flex;align-items:center;gap:12px;align-self:flex-start}
+.wall .waction{font-size:19px}
+.wall .wstat{display:flex;gap:30px;font-size:20px;color:#ccc}
+.wall .wbanner{background:#5a0f0f;border:2px solid #C62828;border-radius:10px;padding:12px 18px;font-size:22px;font-weight:700}
+.wall .wclock{font-size:20px;color:#9aa}
+@media(max-width:820px){
+  .nav{position:fixed;left:0;top:52px;bottom:0;transform:translateX(-100%);transition:transform .2s;z-index:50}
+  .nav.open{transform:none}
+  .menutoggle{display:inline-flex!important}
+  .topbar .title small{display:none}
+  .wall .wgrid{grid-template-columns:1fr}
+}
+.menutoggle{display:none;background:none;border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:5px 9px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const DATA = {"meta":{"project":"Integrated IoT Landslide Monitoring & Warning System","owner":"DDPM","generated_for":"clickable prototype (static mock)","now":"2026-07-07T09:00:00","tor_scope":"§6.10, §6.11, ภาคผนวก ก. §1.7–§1.8","lang":"th-first","appendix_notes":"§1.7.2 responsive(TOR); §1.7.4 PDF export(TOR); §1.7.7 normal→evacuate statuses; §1.8 75in 4K ≥60Hz wall(TOR)"},"severity":{"landslide":[{"level":"normal","th":"ปกติ","en":"Normal","color":"#2E7D32","cap_severity":"Minor","cap_urgency":"Future","cap_certainty":"Unlikely","icon":"shield-check","action_th":"ติดตามตามปกติ","action_en":"Routine monitoring"},{"level":"watch","th":"เฝ้าระวัง","en":"Watch","color":"#F9A825","cap_severity":"Moderate","cap_urgency":"Future","cap_certainty":"Possible","icon":"eye","action_th":"เฝ้าระวัง ติดตามใกล้ชิด","action_en":"Watch — monitor closely"},{"level":"warning","th":"เตือนภัย","en":"Warning","color":"#EF6C00","cap_severity":"Severe","cap_urgency":"Expected","cap_certainty":"Likely","icon":"alert-triangle","action_th":"เตรียมพร้อมอพยพ","action_en":"Prepare to evacuate"},{"level":"danger","th":"อพยพ (อันตราย)","en":"Evacuate (Danger)","color":"#C62828","cap_severity":"Extreme","cap_urgency":"Immediate","cap_certainty":"Observed","icon":"alert-octagon","action_th":"อพยพทันที","action_en":"Evacuate now"}],"system":[{"level":"info","th":"ข้อมูล","en":"Info","color":"#607D8B","style":"badge","icon":"info"},{"level":"warning","th":"เฝ้าระวัง","en":"Warning","color":"#B58900","style":"badge-outline","icon":"battery-low"},{"level":"critical","th":"วิกฤต","en":"Critical","color":"#8E24AA","style":"badge-solid","icon":"wifi-off"}]},"areas":[{"id":"A1","name_th":"บ้านห้วยน้ำขุ่น","name_en":"Ban Huai Nam Khun","amphoe":"แม่สรวย","province":"เชียงราย","lat":19.642,"lon":99.498,"device_counts":{"debris_flow_detector":6,"rainfall_sensor":2,"master_station":1,"warning_box":5},"devices_total":14,"devices_offline":1,"risk_level":"warning"},{"id":"A2","name_th":"บ้านน้ำรี","name_en":"Ban Nam Ri","amphoe":"บ่อเกลือ","province":"น่าน","lat":19.079,"lon":101.156,"device_counts":{"debris_flow_detector":6,"rainfall_sensor":1,"master_station":1,"warning_box":5},"devices_total":13,"devices_offline":0,"risk_level":"watch"},{"id":"A3","name_th":"บ้านน้ำต๊ะ","name_en":"Ban Nam Ta","amphoe":"ท่าปลา","province":"อุตรดิตถ์","lat":17.811,"lon":100.562,"device_counts":{"debris_flow_detector":6,"rainfall_sensor":1,"master_station":1,"warning_box":5},"devices_total":13,"devices_offline":1,"risk_level":"normal"},{"id":"A4","name_th":"บ้านน้ำก้อ","name_en":"Ban Nam Ko","amphoe":"หล่มสัก","province":"เพชรบูรณ์","lat":16.736,"lon":101.121,"device_counts":{"debris_flow_detector":5,"rainfall_sensor":1,"master_station":1,"warning_box":5},"devices_total":12,"devices_offline":0,"risk_level":"danger"}],"devices":[{"id":"A1-DFD-01","area_id":"A1","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #1","name_en":"Debris Flow Detector #1","lat":19.6163,"lon":99.5002,"health":{"status":"online","online_rate":98.6,"battery":89,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A1-DFD-02","area_id":"A1","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #2","name_en":"Debris Flow Detector #2","lat":19.6172,"lon":99.4931,"health":{"status":"online","online_rate":98.7,"battery":86,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A1-DFD-03","area_id":"A1","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #3","name_en":"Debris Flow Detector #3","lat":19.6194,"lon":99.4814,"health":{"status":"online","online_rate":98.5,"battery":98,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A1-DFD-04","area_id":"A1","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #4","name_en":"Debris Flow Detector #4","lat":19.6706,"lon":99.4708,"health":{"status":"online","online_rate":99.3,"battery":86,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A1-DFD-05","area_id":"A1","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #5","name_en":"Debris Flow Detector #5","lat":19.6444,"lon":99.5023,"health":{"status":"online","online_rate":99.7,"battery":94,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A1-DFD-06","area_id":"A1","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #6","name_en":"Debris Flow Detector #6","lat":19.6182,"lon":99.5023,"health":{"status":"offline","online_rate":46.8,"battery":0,"signal":0,"power":"solar-fault"},"last_update":"2026-07-07T07:39:00","installed_at":"2026-02-15"},{"id":"A1-RN-01","area_id":"A1","type":"rainfall_sensor","name_th":"เซนเซอร์วัดปริมาณน้ำฝน #1","name_en":"Rainfall Sensor #1","lat":19.6156,"lon":99.4804,"health":{"status":"online","online_rate":98.4,"battery":88,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A1-RN-02","area_id":"A1","type":"rainfall_sensor","name_th":"เซนเซอร์วัดปริมาณน้ำฝน #2","name_en":"Rainfall Sensor #2","lat":19.6471,"lon":99.4952,"health":{"status":"online","online_rate":99.4,"battery":98,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A1-MS-01","area_id":"A1","type":"master_station","name_th":"สถานีแม่ข่ายควบคุมหลัก #1","name_en":"Master Station #1","lat":19.6465,"lon":99.4995,"health":{"status":"online","online_rate":98.6,"battery":90,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A1-WB-01","area_id":"A1","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #1","name_en":"Village Warning Box #1","lat":19.6708,"lon":99.4751,"health":{"status":"online","online_rate":99.8,"battery":99,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A1-WB-02","area_id":"A1","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #2","name_en":"Village Warning Box #2","lat":19.6373,"lon":99.5257,"health":{"status":"online","online_rate":98.8,"battery":95,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A1-WB-03","area_id":"A1","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #3","name_en":"Village Warning Box #3","lat":19.6477,"lon":99.5028,"health":{"status":"online","online_rate":98.2,"battery":95,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:58:00","installed_at":"2026-02-15"},{"id":"A1-WB-04","area_id":"A1","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #4","name_en":"Village Warning Box #4","lat":19.6538,"lon":99.4719,"health":{"status":"online","online_rate":98.9,"battery":87,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A1-WB-05","area_id":"A1","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #5","name_en":"Village Warning Box #5","lat":19.655,"lon":99.5212,"health":{"status":"online","online_rate":95.1,"battery":12,"signal":4,"power":"solar-weak"},"last_update":"2026-07-07T08:58:00","installed_at":"2026-02-15"},{"id":"A2-DFD-01","area_id":"A2","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #1","name_en":"Debris Flow Detector #1","lat":19.0857,"lon":101.1556,"health":{"status":"online","online_rate":98.7,"battery":99,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A2-DFD-02","area_id":"A2","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #2","name_en":"Debris Flow Detector #2","lat":19.0729,"lon":101.181,"health":{"status":"online","online_rate":98.4,"battery":94,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A2-DFD-03","area_id":"A2","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #3","name_en":"Debris Flow Detector #3","lat":19.082,"lon":101.179,"health":{"status":"online","online_rate":99.0,"battery":90,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A2-DFD-04","area_id":"A2","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #4","name_en":"Debris Flow Detector #4","lat":19.09,"lon":101.1488,"health":{"status":"online","online_rate":99.6,"battery":93,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:58:00","installed_at":"2026-02-15"},{"id":"A2-DFD-05","area_id":"A2","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #5","name_en":"Debris Flow Detector #5","lat":19.0629,"lon":101.14,"health":{"status":"online","online_rate":98.5,"battery":87,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A2-DFD-06","area_id":"A2","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #6","name_en":"Debris Flow Detector #6","lat":19.0648,"lon":101.1262,"health":{"status":"online","online_rate":85.8,"battery":78,"signal":1,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A2-RN-01","area_id":"A2","type":"rainfall_sensor","name_th":"เซนเซอร์วัดปริมาณน้ำฝน #1","name_en":"Rainfall Sensor #1","lat":19.0904,"lon":101.1569,"health":{"status":"online","online_rate":98.8,"battery":96,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A2-MS-01","area_id":"A2","type":"master_station","name_th":"สถานีแม่ข่ายควบคุมหลัก #1","name_en":"Master Station #1","lat":19.0725,"lon":101.1499,"health":{"status":"online","online_rate":99.2,"battery":86,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A2-WB-01","area_id":"A2","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #1","name_en":"Village Warning Box #1","lat":19.053,"lon":101.1385,"health":{"status":"online","online_rate":98.2,"battery":97,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A2-WB-02","area_id":"A2","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #2","name_en":"Village Warning Box #2","lat":19.049,"lon":101.1351,"health":{"status":"online","online_rate":98.3,"battery":95,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A2-WB-03","area_id":"A2","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #3","name_en":"Village Warning Box #3","lat":19.1015,"lon":101.1628,"health":{"status":"online","online_rate":98.2,"battery":96,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A2-WB-04","area_id":"A2","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #4","name_en":"Village Warning Box #4","lat":19.0708,"lon":101.1334,"health":{"status":"online","online_rate":98.3,"battery":93,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A2-WB-05","area_id":"A2","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #5","name_en":"Village Warning Box #5","lat":19.0677,"lon":101.1346,"health":{"status":"online","online_rate":99.7,"battery":99,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A3-DFD-01","area_id":"A3","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #1","name_en":"Debris Flow Detector #1","lat":17.812,"lon":100.5443,"health":{"status":"online","online_rate":99.5,"battery":93,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A3-DFD-02","area_id":"A3","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #2","name_en":"Debris Flow Detector #2","lat":17.8358,"lon":100.5775,"health":{"status":"online","online_rate":99.9,"battery":96,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A3-DFD-03","area_id":"A3","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #3","name_en":"Debris Flow Detector #3","lat":17.803,"lon":100.542,"health":{"status":"online","online_rate":98.6,"battery":87,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A3-DFD-04","area_id":"A3","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #4","name_en":"Debris Flow Detector #4","lat":17.8297,"lon":100.5911,"health":{"status":"online","online_rate":99.5,"battery":95,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A3-DFD-05","area_id":"A3","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #5","name_en":"Debris Flow Detector #5","lat":17.793,"lon":100.5616,"health":{"status":"online","online_rate":99.7,"battery":92,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A3-DFD-06","area_id":"A3","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #6","name_en":"Debris Flow Detector #6","lat":17.7966,"lon":100.5736,"health":{"status":"online","online_rate":99.5,"battery":85,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A3-RN-01","area_id":"A3","type":"rainfall_sensor","name_th":"เซนเซอร์วัดปริมาณน้ำฝน #1","name_en":"Rainfall Sensor #1","lat":17.7858,"lon":100.5381,"health":{"status":"online","online_rate":99.9,"battery":99,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:58:00","installed_at":"2026-02-15"},{"id":"A3-MS-01","area_id":"A3","type":"master_station","name_th":"สถานีแม่ข่ายควบคุมหลัก #1","name_en":"Master Station #1","lat":17.8184,"lon":100.586,"health":{"status":"online","online_rate":98.9,"battery":95,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A3-WB-01","area_id":"A3","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #1","name_en":"Village Warning Box #1","lat":17.8311,"lon":100.5392,"health":{"status":"online","online_rate":99.7,"battery":100,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A3-WB-02","area_id":"A3","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #2","name_en":"Village Warning Box #2","lat":17.807,"lon":100.5702,"health":{"status":"online","online_rate":98.8,"battery":91,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A3-WB-03","area_id":"A3","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #3","name_en":"Village Warning Box #3","lat":17.8256,"lon":100.5371,"health":{"status":"online","online_rate":98.2,"battery":97,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A3-WB-04","area_id":"A3","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #4","name_en":"Village Warning Box #4","lat":17.8164,"lon":100.5599,"health":{"status":"online","online_rate":98.3,"battery":89,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A3-WB-05","area_id":"A3","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #5","name_en":"Village Warning Box #5","lat":17.8204,"lon":100.553,"health":{"status":"offline","online_rate":49.7,"battery":0,"signal":0,"power":"solar-fault"},"last_update":"2026-07-07T06:24:00","installed_at":"2026-02-15"},{"id":"A4-DFD-01","area_id":"A4","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #1","name_en":"Debris Flow Detector #1","lat":16.754,"lon":101.1346,"health":{"status":"online","online_rate":99.1,"battery":89,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T09:00:00","installed_at":"2026-02-15"},{"id":"A4-DFD-02","area_id":"A4","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #2","name_en":"Debris Flow Detector #2","lat":16.7556,"lon":101.1037,"health":{"status":"online","online_rate":98.2,"battery":89,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A4-DFD-03","area_id":"A4","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #3","name_en":"Debris Flow Detector #3","lat":16.7256,"lon":101.1237,"health":{"status":"online","online_rate":98.5,"battery":94,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A4-DFD-04","area_id":"A4","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #4","name_en":"Debris Flow Detector #4","lat":16.7457,"lon":101.1399,"health":{"status":"online","online_rate":99.7,"battery":86,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A4-DFD-05","area_id":"A4","type":"debris_flow_detector","name_th":"เซนเซอร์ตรวจวัดการไหลของมวลดิน #5","name_en":"Debris Flow Detector #5","lat":16.7366,"lon":101.1434,"health":{"status":"online","online_rate":99.0,"battery":89,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A4-RN-01","area_id":"A4","type":"rainfall_sensor","name_th":"เซนเซอร์วัดปริมาณน้ำฝน #1","name_en":"Rainfall Sensor #1","lat":16.7145,"lon":101.1281,"health":{"status":"online","online_rate":99.6,"battery":85,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A4-MS-01","area_id":"A4","type":"master_station","name_th":"สถานีแม่ข่ายควบคุมหลัก #1","name_en":"Master Station #1","lat":16.7378,"lon":101.1199,"health":{"status":"online","online_rate":98.2,"battery":86,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A4-WB-01","area_id":"A4","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #1","name_en":"Village Warning Box #1","lat":16.7226,"lon":101.1373,"health":{"status":"online","online_rate":99.6,"battery":86,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:59:00","installed_at":"2026-02-15"},{"id":"A4-WB-02","area_id":"A4","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #2","name_en":"Village Warning Box #2","lat":16.7255,"lon":101.1494,"health":{"status":"online","online_rate":99.0,"battery":85,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A4-WB-03","area_id":"A4","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #3","name_en":"Village Warning Box #3","lat":16.7365,"lon":101.1394,"health":{"status":"online","online_rate":99.2,"battery":91,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"},{"id":"A4-WB-04","area_id":"A4","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #4","name_en":"Village Warning Box #4","lat":16.7596,"lon":101.1032,"health":{"status":"online","online_rate":99.0,"battery":92,"signal":5,"power":"solar-ok"},"last_update":"2026-07-07T08:56:00","installed_at":"2026-02-15"},{"id":"A4-WB-05","area_id":"A4","type":"warning_box","name_th":"ตู้เตือนภัยประจำหมู่บ้าน #5","name_en":"Village Warning Box #5","lat":16.7325,"lon":101.0954,"health":{"status":"online","online_rate":98.9,"battery":98,"signal":4,"power":"solar-ok"},"last_update":"2026-07-07T08:57:00","installed_at":"2026-02-15"}],"history":{"A1":{"hourly":[{"t":"2026-07-05T09:00:00","rainfall_mm":6.1,"soil_moisture_pct":53.9},{"t":"2026-07-05T10:00:00","rainfall_mm":7.4,"soil_moisture_pct":57.6},{"t":"2026-07-05T11:00:00","rainfall_mm":7.7,"soil_moisture_pct":57.6},{"t":"2026-07-05T12:00:00","rainfall_mm":4.7,"soil_moisture_pct":51.0},{"t":"2026-07-05T13:00:00","rainfall_mm":10.6,"soil_moisture_pct":65.9},{"t":"2026-07-05T14:00:00","rainfall_mm":11.8,"soil_moisture_pct":60.8},{"t":"2026-07-05T15:00:00","rainfall_mm":9.5,"soil_moisture_pct":58.9},{"t":"2026-07-05T16:00:00","rainfall_mm":4.9,"soil_moisture_pct":54.7},{"t":"2026-07-05T17:00:00","rainfall_mm":7.1,"soil_moisture_pct":53.5},{"t":"2026-07-05T18:00:00","rainfall_mm":4.1,"soil_moisture_pct":48.4},{"t":"2026-07-05T19:00:00","rainfall_mm":4.7,"soil_moisture_pct":47.6},{"t":"2026-07-05T20:00:00","rainfall_mm":8.0,"soil_moisture_pct":58.2},{"t":"2026-07-05T21:00:00","rainfall_mm":10.5,"soil_moisture_pct":60.4},{"t":"2026-07-05T22:00:00","rainfall_mm":6.6,"soil_moisture_pct":48.4},{"t":"2026-07-05T23:00:00","rainfall_mm":3.5,"soil_moisture_pct":47.1},{"t":"2026-07-06T00:00:00","rainfall_mm":10.4,"soil_moisture_pct":56.4},{"t":"2026-07-06T01:00:00","rainfall_mm":12.3,"soil_moisture_pct":69.3},{"t":"2026-07-06T02:00:00","rainfall_mm":5.4,"soil_moisture_pct":46.8},{"t":"2026-07-06T03:00:00","rainfall_mm":5.9,"soil_moisture_pct":54.6},{"t":"2026-07-06T04:00:00","rainfall_mm":7.0,"soil_moisture_pct":51.7},{"t":"2026-07-06T05:00:00","rainfall_mm":8.6,"soil_moisture_pct":61.3},{"t":"2026-07-06T06:00:00","rainfall_mm":8.7,"soil_moisture_pct":60.6},{"t":"2026-07-06T07:00:00","rainfall_mm":5.9,"soil_moisture_pct":56.0},{"t":"2026-07-06T08:00:00","rainfall_mm":8.0,"soil_moisture_pct":56.7},{"t":"2026-07-06T09:00:00","rainfall_mm":5.5,"soil_moisture_pct":46.6},{"t":"2026-07-06T10:00:00","rainfall_mm":4.5,"soil_moisture_pct":50.9},{"t":"2026-07-06T11:00:00","rainfall_mm":4.8,"soil_moisture_pct":54.0},{"t":"2026-07-06T12:00:00","rainfall_mm":6.6,"soil_moisture_pct":54.5},{"t":"2026-07-06T13:00:00","rainfall_mm":6.5,"soil_moisture_pct":56.6},{"t":"2026-07-06T14:00:00","rainfall_mm":4.6,"soil_moisture_pct":44.9},{"t":"2026-07-06T15:00:00","rainfall_mm":8.6,"soil_moisture_pct":55.6},{"t":"2026-07-06T16:00:00","rainfall_mm":3.0,"soil_moisture_pct":46.5},{"t":"2026-07-06T17:00:00","rainfall_mm":8.5,"soil_moisture_pct":53.3},{"t":"2026-07-06T18:00:00","rainfall_mm":4.7,"soil_moisture_pct":49.7},{"t":"2026-07-06T19:00:00","rainfall_mm":6.1,"soil_moisture_pct":48.8},{"t":"2026-07-06T20:00:00","rainfall_mm":7.7,"soil_moisture_pct":50.9},{"t":"2026-07-06T21:00:00","rainfall_mm":6.9,"soil_moisture_pct":51.9},{"t":"2026-07-06T22:00:00","rainfall_mm":9.0,"soil_moisture_pct":60.6},{"t":"2026-07-06T23:00:00","rainfall_mm":4.9,"soil_moisture_pct":46.6},{"t":"2026-07-07T00:00:00","rainfall_mm":10.1,"soil_moisture_pct":58.7},{"t":"2026-07-07T01:00:00","rainfall_mm":8.7,"soil_moisture_pct":52.6},{"t":"2026-07-07T02:00:00","rainfall_mm":6.3,"soil_moisture_pct":54.9},{"t":"2026-07-07T03:00:00","rainfall_mm":3.8,"soil_moisture_pct":47.3},{"t":"2026-07-07T04:00:00","rainfall_mm":5.3,"soil_moisture_pct":54.9},{"t":"2026-07-07T05:00:00","rainfall_mm":11.2,"soil_moisture_pct":61.7},{"t":"2026-07-07T06:00:00","rainfall_mm":10.1,"soil_moisture_pct":60.2},{"t":"2026-07-07T07:00:00","rainfall_mm":7.8,"soil_moisture_pct":55.7},{"t":"2026-07-07T08:00:00","rainfall_mm":2.9,"soil_moisture_pct":47.7}],"daily":[{"date":"2026-06-07","rainfall_mm":117.9},{"date":"2026-06-08","rainfall_mm":41.1},{"date":"2026-06-09","rainfall_mm":99.9},{"date":"2026-06-10","rainfall_mm":84.8},{"date":"2026-06-11","rainfall_mm":76.3},{"date":"2026-06-12","rainfall_mm":48.6},{"date":"2026-06-13","rainfall_mm":41.7},{"date":"2026-06-14","rainfall_mm":6.5},{"date":"2026-06-15","rainfall_mm":15.6},{"date":"2026-06-16","rainfall_mm":8.5},{"date":"2026-06-17","rainfall_mm":88.9},{"date":"2026-06-18","rainfall_mm":30.7},{"date":"2026-06-19","rainfall_mm":19.6},{"date":"2026-06-20","rainfall_mm":10.1},{"date":"2026-06-21","rainfall_mm":101.0},{"date":"2026-06-22","rainfall_mm":104.5},{"date":"2026-06-23","rainfall_mm":80.5},{"date":"2026-06-24","rainfall_mm":33.8},{"date":"2026-06-25","rainfall_mm":29.1},{"date":"2026-06-26","rainfall_mm":35.2},{"date":"2026-06-27","rainfall_mm":55.1},{"date":"2026-06-28","rainfall_mm":18.9},{"date":"2026-06-29","rainfall_mm":53.5},{"date":"2026-06-30","rainfall_mm":31.6},{"date":"2026-07-01","rainfall_mm":115.4},{"date":"2026-07-02","rainfall_mm":116.7},{"date":"2026-07-03","rainfall_mm":65.6},{"date":"2026-07-04","rainfall_mm":29.3},{"date":"2026-07-05","rainfall_mm":115.9},{"date":"2026-07-06","rainfall_mm":37.1}],"monthly":[{"month":"2025-07","rainfall_mm":353.1},{"month":"2025-08","rainfall_mm":50.9},{"month":"2025-09","rainfall_mm":374.4},{"month":"2025-10","rainfall_mm":453.4},{"month":"2025-11","rainfall_mm":477.3},{"month":"2025-12","rainfall_mm":220.8},{"month":"2026-01","rainfall_mm":479.0},{"month":"2026-02","rainfall_mm":54.2},{"month":"2026-03","rainfall_mm":274.5},{"month":"2026-04","rainfall_mm":126.3},{"month":"2026-05","rainfall_mm":389.6},{"month":"2026-06","rainfall_mm":85.4}]},"A2":{"hourly":[{"t":"2026-07-05T09:00:00","rainfall_mm":4.5,"soil_moisture_pct":46.3},{"t":"2026-07-05T10:00:00","rainfall_mm":3.2,"soil_moisture_pct":47.3},{"t":"2026-07-05T11:00:00","rainfall_mm":0.1,"soil_moisture_pct":41.8},{"t":"2026-07-05T12:00:00","rainfall_mm":2.5,"soil_moisture_pct":47.2},{"t":"2026-07-05T13:00:00","rainfall_mm":4.3,"soil_moisture_pct":46.9},{"t":"2026-07-05T14:00:00","rainfall_mm":1.8,"soil_moisture_pct":48.4},{"t":"2026-07-05T15:00:00","rainfall_mm":4.7,"soil_moisture_pct":50.8},{"t":"2026-07-05T16:00:00","rainfall_mm":5.3,"soil_moisture_pct":46.0},{"t":"2026-07-05T17:00:00","rainfall_mm":4.9,"soil_moisture_pct":51.1},{"t":"2026-07-05T18:00:00","rainfall_mm":0,"soil_moisture_pct":42.3},{"t":"2026-07-05T19:00:00","rainfall_mm":3.4,"soil_moisture_pct":47.0},{"t":"2026-07-05T20:00:00","rainfall_mm":2.1,"soil_moisture_pct":44.2},{"t":"2026-07-05T21:00:00","rainfall_mm":4.7,"soil_moisture_pct":52.7},{"t":"2026-07-05T22:00:00","rainfall_mm":0.2,"soil_moisture_pct":41.2},{"t":"2026-07-05T23:00:00","rainfall_mm":5.1,"soil_moisture_pct":52.1},{"t":"2026-07-06T00:00:00","rainfall_mm":1.3,"soil_moisture_pct":39.9},{"t":"2026-07-06T01:00:00","rainfall_mm":3.9,"soil_moisture_pct":46.4},{"t":"2026-07-06T02:00:00","rainfall_mm":3.2,"soil_moisture_pct":42.4},{"t":"2026-07-06T03:00:00","rainfall_mm":4.2,"soil_moisture_pct":49.7},{"t":"2026-07-06T04:00:00","rainfall_mm":1.0,"soil_moisture_pct":43.3},{"t":"2026-07-06T05:00:00","rainfall_mm":2.1,"soil_moisture_pct":39.2},{"t":"2026-07-06T06:00:00","rainfall_mm":1.1,"soil_moisture_pct":45.2},{"t":"2026-07-06T07:00:00","rainfall_mm":3.0,"soil_moisture_pct":46.4},{"t":"2026-07-06T08:00:00","rainfall_mm":0.9,"soil_moisture_pct":43.4},{"t":"2026-07-06T09:00:00","rainfall_mm":5.7,"soil_moisture_pct":48.9},{"t":"2026-07-06T10:00:00","rainfall_mm":4.2,"soil_moisture_pct":44.1},{"t":"2026-07-06T11:00:00","rainfall_mm":2.7,"soil_moisture_pct":42.5},{"t":"2026-07-06T12:00:00","rainfall_mm":5.9,"soil_moisture_pct":54.2},{"t":"2026-07-06T13:00:00","rainfall_mm":5.1,"soil_moisture_pct":49.0},{"t":"2026-07-06T14:00:00","rainfall_mm":2.7,"soil_moisture_pct":45.2},{"t":"2026-07-06T15:00:00","rainfall_mm":1.8,"soil_moisture_pct":44.8},{"t":"2026-07-06T16:00:00","rainfall_mm":0.2,"soil_moisture_pct":41.8},{"t":"2026-07-06T17:00:00","rainfall_mm":3.9,"soil_moisture_pct":45.3},{"t":"2026-07-06T18:00:00","rainfall_mm":3.5,"soil_moisture_pct":49.4},{"t":"2026-07-06T19:00:00","rainfall_mm":2.2,"soil_moisture_pct":39.5},{"t":"2026-07-06T20:00:00","rainfall_mm":5.2,"soil_moisture_pct":46.0},{"t":"2026-07-06T21:00:00","rainfall_mm":2.7,"soil_moisture_pct":47.3},{"t":"2026-07-06T22:00:00","rainfall_mm":5.7,"soil_moisture_pct":53.2},{"t":"2026-07-06T23:00:00","rainfall_mm":2.4,"soil_moisture_pct":44.4},{"t":"2026-07-07T00:00:00","rainfall_mm":5.1,"soil_moisture_pct":49.9},{"t":"2026-07-07T01:00:00","rainfall_mm":5.8,"soil_moisture_pct":48.6},{"t":"2026-07-07T02:00:00","rainfall_mm":5.6,"soil_moisture_pct":56.0},{"t":"2026-07-07T03:00:00","rainfall_mm":3.3,"soil_moisture_pct":46.2},{"t":"2026-07-07T04:00:00","rainfall_mm":2.9,"soil_moisture_pct":49.0},{"t":"2026-07-07T05:00:00","rainfall_mm":4.9,"soil_moisture_pct":47.5},{"t":"2026-07-07T06:00:00","rainfall_mm":2.6,"soil_moisture_pct":42.3},{"t":"2026-07-07T07:00:00","rainfall_mm":4.2,"soil_moisture_pct":49.2},{"t":"2026-07-07T08:00:00","rainfall_mm":2.6,"soil_moisture_pct":41.6}],"daily":[{"date":"2026-06-07","rainfall_mm":62.9},{"date":"2026-06-08","rainfall_mm":114.3},{"date":"2026-06-09","rainfall_mm":15.9},{"date":"2026-06-10","rainfall_mm":98.4},{"date":"2026-06-11","rainfall_mm":61.0},{"date":"2026-06-12","rainfall_mm":106.4},{"date":"2026-06-13","rainfall_mm":84.4},{"date":"2026-06-14","rainfall_mm":27.8},{"date":"2026-06-15","rainfall_mm":107.7},{"date":"2026-06-16","rainfall_mm":58.3},{"date":"2026-06-17","rainfall_mm":3.0},{"date":"2026-06-18","rainfall_mm":0.4},{"date":"2026-06-19","rainfall_mm":59.0},{"date":"2026-06-20","rainfall_mm":54.1},{"date":"2026-06-21","rainfall_mm":36.2},{"date":"2026-06-22","rainfall_mm":16.9},{"date":"2026-06-23","rainfall_mm":41.3},{"date":"2026-06-24","rainfall_mm":37.9},{"date":"2026-06-25","rainfall_mm":100.8},{"date":"2026-06-26","rainfall_mm":0.2},{"date":"2026-06-27","rainfall_mm":90.1},{"date":"2026-06-28","rainfall_mm":100.7},{"date":"2026-06-29","rainfall_mm":14.4},{"date":"2026-06-30","rainfall_mm":111.2},{"date":"2026-07-01","rainfall_mm":85.6},{"date":"2026-07-02","rainfall_mm":108.2},{"date":"2026-07-03","rainfall_mm":34.8},{"date":"2026-07-04","rainfall_mm":44.7},{"date":"2026-07-05","rainfall_mm":47.1},{"date":"2026-07-06","rainfall_mm":119.9}],"monthly":[{"month":"2025-07","rainfall_mm":550.8},{"month":"2025-08","rainfall_mm":356.6},{"month":"2025-09","rainfall_mm":413.8},{"month":"2025-10","rainfall_mm":283.9},{"month":"2025-11","rainfall_mm":91.0},{"month":"2025-12","rainfall_mm":136.5},{"month":"2026-01","rainfall_mm":759.5},{"month":"2026-02","rainfall_mm":292.8},{"month":"2026-03","rainfall_mm":845.3},{"month":"2026-04","rainfall_mm":261.9},{"month":"2026-05","rainfall_mm":275.9},{"month":"2026-06","rainfall_mm":484.3}]},"A3":{"hourly":[{"t":"2026-07-05T09:00:00","rainfall_mm":1.2,"soil_moisture_pct":47.0},{"t":"2026-07-05T10:00:00","rainfall_mm":1.5,"soil_moisture_pct":46.8},{"t":"2026-07-05T11:00:00","rainfall_mm":1.3,"soil_moisture_pct":46.7},{"t":"2026-07-05T12:00:00","rainfall_mm":0.2,"soil_moisture_pct":44.8},{"t":"2026-07-05T13:00:00","rainfall_mm":0.1,"soil_moisture_pct":35.7},{"t":"2026-07-05T14:00:00","rainfall_mm":0.7,"soil_moisture_pct":43.7},{"t":"2026-07-05T15:00:00","rainfall_mm":0,"soil_moisture_pct":41.4},{"t":"2026-07-05T16:00:00","rainfall_mm":1.3,"soil_moisture_pct":40.5},{"t":"2026-07-05T17:00:00","rainfall_mm":2.3,"soil_moisture_pct":40.9},{"t":"2026-07-05T18:00:00","rainfall_mm":1.4,"soil_moisture_pct":42.5},{"t":"2026-07-05T19:00:00","rainfall_mm":0.7,"soil_moisture_pct":43.8},{"t":"2026-07-05T20:00:00","rainfall_mm":1.4,"soil_moisture_pct":47.6},{"t":"2026-07-05T21:00:00","rainfall_mm":0.9,"soil_moisture_pct":39.8},{"t":"2026-07-05T22:00:00","rainfall_mm":1.9,"soil_moisture_pct":44.4},{"t":"2026-07-05T23:00:00","rainfall_mm":0.7,"soil_moisture_pct":38.0},{"t":"2026-07-06T00:00:00","rainfall_mm":1.2,"soil_moisture_pct":39.5},{"t":"2026-07-06T01:00:00","rainfall_mm":1.6,"soil_moisture_pct":40.4},{"t":"2026-07-06T02:00:00","rainfall_mm":0.6,"soil_moisture_pct":45.3},{"t":"2026-07-06T03:00:00","rainfall_mm":1.7,"soil_moisture_pct":39.8},{"t":"2026-07-06T04:00:00","rainfall_mm":1.0,"soil_moisture_pct":38.9},{"t":"2026-07-06T05:00:00","rainfall_mm":1.5,"soil_moisture_pct":38.9},{"t":"2026-07-06T06:00:00","rainfall_mm":1.3,"soil_moisture_pct":40.0},{"t":"2026-07-06T07:00:00","rainfall_mm":1.0,"soil_moisture_pct":45.9},{"t":"2026-07-06T08:00:00","rainfall_mm":1.8,"soil_moisture_pct":46.1},{"t":"2026-07-06T09:00:00","rainfall_mm":0.5,"soil_moisture_pct":41.2},{"t":"2026-07-06T10:00:00","rainfall_mm":1.3,"soil_moisture_pct":41.4},{"t":"2026-07-06T11:00:00","rainfall_mm":0.9,"soil_moisture_pct":39.6},{"t":"2026-07-06T12:00:00","rainfall_mm":1.2,"soil_moisture_pct":47.1},{"t":"2026-07-06T13:00:00","rainfall_mm":1.5,"soil_moisture_pct":44.3},{"t":"2026-07-06T14:00:00","rainfall_mm":1.5,"soil_moisture_pct":46.6},{"t":"2026-07-06T15:00:00","rainfall_mm":1.1,"soil_moisture_pct":39.7},{"t":"2026-07-06T16:00:00","rainfall_mm":1.5,"soil_moisture_pct":42.0},{"t":"2026-07-06T17:00:00","rainfall_mm":0,"soil_moisture_pct":43.5},{"t":"2026-07-06T18:00:00","rainfall_mm":1.5,"soil_moisture_pct":46.7},{"t":"2026-07-06T19:00:00","rainfall_mm":1.2,"soil_moisture_pct":44.5},{"t":"2026-07-06T20:00:00","rainfall_mm":1.0,"soil_moisture_pct":46.0},{"t":"2026-07-06T21:00:00","rainfall_mm":0.2,"soil_moisture_pct":35.4},{"t":"2026-07-06T22:00:00","rainfall_mm":1.1,"soil_moisture_pct":41.1},{"t":"2026-07-06T23:00:00","rainfall_mm":2.0,"soil_moisture_pct":47.6},{"t":"2026-07-07T00:00:00","rainfall_mm":0.5,"soil_moisture_pct":45.7},{"t":"2026-07-07T01:00:00","rainfall_mm":1.0,"soil_moisture_pct":38.5},{"t":"2026-07-07T02:00:00","rainfall_mm":1.3,"soil_moisture_pct":42.8},{"t":"2026-07-07T03:00:00","rainfall_mm":0.4,"soil_moisture_pct":43.0},{"t":"2026-07-07T04:00:00","rainfall_mm":0,"soil_moisture_pct":41.5},{"t":"2026-07-07T05:00:00","rainfall_mm":1.1,"soil_moisture_pct":42.7},{"t":"2026-07-07T06:00:00","rainfall_mm":0.3,"soil_moisture_pct":36.0},{"t":"2026-07-07T07:00:00","rainfall_mm":1.1,"soil_moisture_pct":46.4},{"t":"2026-07-07T08:00:00","rainfall_mm":0.6,"soil_moisture_pct":42.7}],"daily":[{"date":"2026-06-07","rainfall_mm":36.5},{"date":"2026-06-08","rainfall_mm":15.4},{"date":"2026-06-09","rainfall_mm":30.2},{"date":"2026-06-10","rainfall_mm":76.4},{"date":"2026-06-11","rainfall_mm":83.8},{"date":"2026-06-12","rainfall_mm":13.5},{"date":"2026-06-13","rainfall_mm":8.4},{"date":"2026-06-14","rainfall_mm":62.9},{"date":"2026-06-15","rainfall_mm":69.9},{"date":"2026-06-16","rainfall_mm":46.6},{"date":"2026-06-17","rainfall_mm":26.8},{"date":"2026-06-18","rainfall_mm":72.1},{"date":"2026-06-19","rainfall_mm":1.3},{"date":"2026-06-20","rainfall_mm":36.2},{"date":"2026-06-21","rainfall_mm":55.3},{"date":"2026-06-22","rainfall_mm":115.1},{"date":"2026-06-23","rainfall_mm":77.3},{"date":"2026-06-24","rainfall_mm":106.1},{"date":"2026-06-25","rainfall_mm":57.0},{"date":"2026-06-26","rainfall_mm":28.2},{"date":"2026-06-27","rainfall_mm":29.6},{"date":"2026-06-28","rainfall_mm":115.3},{"date":"2026-06-29","rainfall_mm":84.6},{"date":"2026-06-30","rainfall_mm":36.9},{"date":"2026-07-01","rainfall_mm":2.6},{"date":"2026-07-02","rainfall_mm":59.8},{"date":"2026-07-03","rainfall_mm":80.9},{"date":"2026-07-04","rainfall_mm":50.4},{"date":"2026-07-05","rainfall_mm":30.9},{"date":"2026-07-06","rainfall_mm":80.1}],"monthly":[{"month":"2025-07","rainfall_mm":836.4},{"month":"2025-08","rainfall_mm":242.8},{"month":"2025-09","rainfall_mm":79.0},{"month":"2025-10","rainfall_mm":337.3},{"month":"2025-11","rainfall_mm":407.5},{"month":"2025-12","rainfall_mm":630.2},{"month":"2026-01","rainfall_mm":218.4},{"month":"2026-02","rainfall_mm":727.5},{"month":"2026-03","rainfall_mm":678.3},{"month":"2026-04","rainfall_mm":479.1},{"month":"2026-05","rainfall_mm":224.4},{"month":"2026-06","rainfall_mm":874.4}]},"A4":{"hourly":[{"t":"2026-07-05T09:00:00","rainfall_mm":5.2,"soil_moisture_pct":47.7},{"t":"2026-07-05T10:00:00","rainfall_mm":18.3,"soil_moisture_pct":73.8},{"t":"2026-07-05T11:00:00","rainfall_mm":9.3,"soil_moisture_pct":63.1},{"t":"2026-07-05T12:00:00","rainfall_mm":4.5,"soil_moisture_pct":49.0},{"t":"2026-07-05T13:00:00","rainfall_mm":10.5,"soil_moisture_pct":60.2},{"t":"2026-07-05T14:00:00","rainfall_mm":12.5,"soil_moisture_pct":66.7},{"t":"2026-07-05T15:00:00","rainfall_mm":11.9,"soil_moisture_pct":62.7},{"t":"2026-07-05T16:00:00","rainfall_mm":8.0,"soil_moisture_pct":53.1},{"t":"2026-07-05T17:00:00","rainfall_mm":11.9,"soil_moisture_pct":59.3},{"t":"2026-07-05T18:00:00","rainfall_mm":8.5,"soil_moisture_pct":52.6},{"t":"2026-07-05T19:00:00","rainfall_mm":0,"soil_moisture_pct":43.8},{"t":"2026-07-05T20:00:00","rainfall_mm":16.2,"soil_moisture_pct":74.7},{"t":"2026-07-05T21:00:00","rainfall_mm":21.5,"soil_moisture_pct":81.3},{"t":"2026-07-05T22:00:00","rainfall_mm":8.8,"soil_moisture_pct":54.5},{"t":"2026-07-05T23:00:00","rainfall_mm":17.2,"soil_moisture_pct":69.7},{"t":"2026-07-06T00:00:00","rainfall_mm":5.5,"soil_moisture_pct":52.6},{"t":"2026-07-06T01:00:00","rainfall_mm":5.2,"soil_moisture_pct":48.7},{"t":"2026-07-06T02:00:00","rainfall_mm":12.6,"soil_moisture_pct":61.9},{"t":"2026-07-06T03:00:00","rainfall_mm":13.4,"soil_moisture_pct":65.3},{"t":"2026-07-06T04:00:00","rainfall_mm":9.1,"soil_moisture_pct":62.8},{"t":"2026-07-06T05:00:00","rainfall_mm":18.9,"soil_moisture_pct":74.9},{"t":"2026-07-06T06:00:00","rainfall_mm":18.8,"soil_moisture_pct":76.2},{"t":"2026-07-06T07:00:00","rainfall_mm":13.4,"soil_moisture_pct":66.1},{"t":"2026-07-06T08:00:00","rainfall_mm":0,"soil_moisture_pct":35.5},{"t":"2026-07-06T09:00:00","rainfall_mm":3.9,"soil_moisture_pct":52.0},{"t":"2026-07-06T10:00:00","rainfall_mm":9.9,"soil_moisture_pct":56.7},{"t":"2026-07-06T11:00:00","rainfall_mm":1.4,"soil_moisture_pct":38.1},{"t":"2026-07-06T12:00:00","rainfall_mm":17.7,"soil_moisture_pct":74.5},{"t":"2026-07-06T13:00:00","rainfall_mm":12.5,"soil_moisture_pct":60.4},{"t":"2026-07-06T14:00:00","rainfall_mm":0.5,"soil_moisture_pct":36.3},{"t":"2026-07-06T15:00:00","rainfall_mm":20.2,"soil_moisture_pct":78.0},{"t":"2026-07-06T16:00:00","rainfall_mm":13.7,"soil_moisture_pct":69.9},{"t":"2026-07-06T17:00:00","rainfall_mm":12.9,"soil_moisture_pct":63.5},{"t":"2026-07-06T18:00:00","rainfall_mm":6.1,"soil_moisture_pct":56.8},{"t":"2026-07-06T19:00:00","rainfall_mm":5.9,"soil_moisture_pct":54.0},{"t":"2026-07-06T20:00:00","rainfall_mm":6.2,"soil_moisture_pct":50.6},{"t":"2026-07-06T21:00:00","rainfall_mm":8.9,"soil_moisture_pct":60.4},{"t":"2026-07-06T22:00:00","rainfall_mm":9.5,"soil_moisture_pct":63.2},{"t":"2026-07-06T23:00:00","rainfall_mm":0.4,"soil_moisture_pct":36.0},{"t":"2026-07-07T00:00:00","rainfall_mm":0,"soil_moisture_pct":37.3},{"t":"2026-07-07T01:00:00","rainfall_mm":0,"soil_moisture_pct":44.5},{"t":"2026-07-07T02:00:00","rainfall_mm":11.1,"soil_moisture_pct":61.1},{"t":"2026-07-07T03:00:00","rainfall_mm":9.0,"soil_moisture_pct":57.9},{"t":"2026-07-07T04:00:00","rainfall_mm":14.7,"soil_moisture_pct":73.7},{"t":"2026-07-07T05:00:00","rainfall_mm":13.0,"soil_moisture_pct":68.4},{"t":"2026-07-07T06:00:00","rainfall_mm":17.9,"soil_moisture_pct":79.0},{"t":"2026-07-07T07:00:00","rainfall_mm":10.1,"soil_moisture_pct":58.5},{"t":"2026-07-07T08:00:00","rainfall_mm":1.7,"soil_moisture_pct":41.6}],"daily":[{"date":"2026-06-07","rainfall_mm":43.4},{"date":"2026-06-08","rainfall_mm":93.9},{"date":"2026-06-09","rainfall_mm":9.5},{"date":"2026-06-10","rainfall_mm":23.7},{"date":"2026-06-11","rainfall_mm":90.3},{"date":"2026-06-12","rainfall_mm":29.7},{"date":"2026-06-13","rainfall_mm":7.8},{"date":"2026-06-14","rainfall_mm":4.1},{"date":"2026-06-15","rainfall_mm":66.3},{"date":"2026-06-16","rainfall_mm":39.1},{"date":"2026-06-17","rainfall_mm":117.6},{"date":"2026-06-18","rainfall_mm":106.0},{"date":"2026-06-19","rainfall_mm":118.5},{"date":"2026-06-20","rainfall_mm":31.8},{"date":"2026-06-21","rainfall_mm":10.1},{"date":"2026-06-22","rainfall_mm":11.6},{"date":"2026-06-23","rainfall_mm":59.8},{"date":"2026-06-24","rainfall_mm":85.2},{"date":"2026-06-25","rainfall_mm":53.6},{"date":"2026-06-26","rainfall_mm":28.1},{"date":"2026-06-27","rainfall_mm":50.0},{"date":"2026-06-28","rainfall_mm":74.4},{"date":"2026-06-29","rainfall_mm":80.9},{"date":"2026-06-30","rainfall_mm":89.8},{"date":"2026-07-01","rainfall_mm":101.6},{"date":"2026-07-02","rainfall_mm":79.7},{"date":"2026-07-03","rainfall_mm":14.5},{"date":"2026-07-04","rainfall_mm":100.9},{"date":"2026-07-05","rainfall_mm":35.3},{"date":"2026-07-06","rainfall_mm":68.0}],"monthly":[{"month":"2025-07","rainfall_mm":367.0},{"month":"2025-08","rainfall_mm":677.4},{"month":"2025-09","rainfall_mm":219.3},{"month":"2025-10","rainfall_mm":260.3},{"month":"2025-11","rainfall_mm":258.5},{"month":"2025-12","rainfall_mm":180.3},{"month":"2026-01","rainfall_mm":801.5},{"month":"2026-02","rainfall_mm":541.5},{"month":"2026-03","rainfall_mm":327.4},{"month":"2026-04","rainfall_mm":386.7},{"month":"2026-05","rainfall_mm":893.6},{"month":"2026-06","rainfall_mm":481.2}]}},"alerts":[{"id":"AL-1001","stream":"landslide","level":"danger","area_id":"A4","device_id":null,"cap":{"severity":"Extreme","urgency":"Immediate","certainty":"Observed"},"title_th":"เตือนภัยดินถล่ม ระดับอันตราย - บ้านน้ำก้อ","message_th":"ปริมาณฝนสะสมและความชื้นในดินเกินเกณฑ์วิกฤต ตรวจพบการเคลื่อนตัวของมวลดิน","timestamp":"2026-07-07T08:48:00","email_sent":true,"runbook_case":null,"title_en":"Landslide alert — EVACUATE — Ban Nam Ko","message_en":"Cumulative rainfall and soil moisture exceeded the critical threshold; ground movement detected."},{"id":"AL-1002","stream":"system","level":"critical","area_id":"A3","device_id":"A3-WB-05","title_th":"ตู้เตือนภัยออฟไลน์ - บ้านน้ำต๊ะ","message_th":"ตู้เตือนภัยประจำหมู่บ้าน #5 ขาดการเชื่อมต่อเกิน 30 นาที","timestamp":"2026-07-07T08:19:00","email_sent":true,"runbook_case":"RB-01","title_en":"Warning box offline — Ban Nam Ta","message_en":"Village warning box #5 lost connection for over 30 minutes."}],"auto_monitor_log":[{"id":"AM-5001","check":"device_status","device_id":"A3-WB-05","result":"fault","detail":"offline > 30 min","channel":"email+dashboard","timestamp":"2026-07-07T08:19:00","auto_alert_id":"AL-1002"},{"id":"AM-5002","check":"battery","device_id":"A1-WB-05","result":"warning","detail":"battery 14%","channel":"dashboard","timestamp":"2026-07-07T07:57:00","auto_alert_id":null},{"id":"AM-5003","check":"risk_threshold","device_id":null,"area_id":"A4","result":"critical","detail":"rainfall+soil-moisture over threshold","channel":"email+dashboard","timestamp":"2026-07-07T08:48:00","auto_alert_id":"AL-1001"}],"runbook":[{"case_id":"RB-01","category":"connectivity","title_th":"อุปกรณ์ออฟไลน์ / ขาดการเชื่อมต่อ","title_en":"Device offline / lost connection","steps_th":["ตรวจสอบไฟสถานะ (LED) ที่ตัวอุปกรณ์","ตรวจสอบแผงโซลาร์เซลล์ว่ามีสิ่งบดบังหรือสกปรกหรือไม่","วัดแรงดันแบตเตอรี่ด้วยมัลติมิเตอร์ (ควร > 12.4V)","รีสตาร์ทอุปกรณ์โดยกดปุ่ม reset ค้าง 5 วินาที","หากไม่กลับมาออนไลน์ภายใน 10 นาที แจ้งทีมสนับสนุน พร้อมรหัสอุปกรณ์"],"steps_en":["Check the status LED on the device","Inspect the solar panel for shading or dirt","Measure battery voltage with a multimeter (should be > 12.4V)","Restart the device by holding reset for 5 seconds","If not back online within 10 min, contact support with the device ID"]},{"case_id":"RB-02","category":"power","title_th":"แบตเตอรี่ต่ำ","title_en":"Low battery","steps_th":["ตรวจสอบว่าแผงโซลาร์เซลล์ได้รับแสงเพียงพอ","ทำความสะอาดผิวหน้าแผงโซลาร์เซลล์","ตรวจสอบขั้วต่อสายไฟว่าหลวมหรือมีคราบสนิม","หากแบตเตอรี่ < 20% ต่อเนื่อง 24 ชม. ให้เปลี่ยนแบตเตอรี่ตามคู่มือ"],"steps_en":["Verify the solar panel receives enough sunlight","Clean the solar panel surface","Check wiring terminals for looseness or corrosion","If battery stays < 20% for 24h, replace it per the manual"]},{"case_id":"RB-03","category":"signal","title_th":"สัญญาณอ่อน","title_en":"Weak signal","steps_th":["ตรวจสอบเสาอากาศว่าอยู่ในตำแหน่งตั้งตรง","ตรวจสอบสิ่งกีดขวางแนวสัญญาณที่เพิ่งเกิดใหม่","ตรวจสอบสถานะเครือข่ายของสถานีแม่ข่ายในพื้นที่","ถ้าสัญญาณยังต่ำ ให้บันทึกและแจ้งทีมสนับสนุน"],"steps_en":["Check the antenna is upright and correctly aligned","Look for newly appeared line-of-sight obstructions","Check the local master station network status","If signal stays low, log it and contact support"]},{"case_id":"RB-04","category":"misc","title_th":"กรณีปัญหาที่ 4 (ตัวอย่าง)","title_en":"Problem case 4 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-05","category":"misc","title_th":"กรณีปัญหาที่ 5 (ตัวอย่าง)","title_en":"Problem case 5 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-06","category":"misc","title_th":"กรณีปัญหาที่ 6 (ตัวอย่าง)","title_en":"Problem case 6 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-07","category":"misc","title_th":"กรณีปัญหาที่ 7 (ตัวอย่าง)","title_en":"Problem case 7 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-08","category":"misc","title_th":"กรณีปัญหาที่ 8 (ตัวอย่าง)","title_en":"Problem case 8 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-09","category":"misc","title_th":"กรณีปัญหาที่ 9 (ตัวอย่าง)","title_en":"Problem case 9 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-10","category":"misc","title_th":"กรณีปัญหาที่ 10 (ตัวอย่าง)","title_en":"Problem case 10 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-11","category":"misc","title_th":"กรณีปัญหาที่ 11 (ตัวอย่าง)","title_en":"Problem case 11 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-12","category":"misc","title_th":"กรณีปัญหาที่ 12 (ตัวอย่าง)","title_en":"Problem case 12 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-13","category":"misc","title_th":"กรณีปัญหาที่ 13 (ตัวอย่าง)","title_en":"Problem case 13 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-14","category":"misc","title_th":"กรณีปัญหาที่ 14 (ตัวอย่าง)","title_en":"Problem case 14 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-15","category":"misc","title_th":"กรณีปัญหาที่ 15 (ตัวอย่าง)","title_en":"Problem case 15 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-16","category":"misc","title_th":"กรณีปัญหาที่ 16 (ตัวอย่าง)","title_en":"Problem case 16 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-17","category":"misc","title_th":"กรณีปัญหาที่ 17 (ตัวอย่าง)","title_en":"Problem case 17 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-18","category":"misc","title_th":"กรณีปัญหาที่ 18 (ตัวอย่าง)","title_en":"Problem case 18 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-19","category":"misc","title_th":"กรณีปัญหาที่ 19 (ตัวอย่าง)","title_en":"Problem case 19 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]},{"case_id":"RB-20","category":"misc","title_th":"กรณีปัญหาที่ 20 (ตัวอย่าง)","title_en":"Problem case 20 (placeholder)","steps_th":["<ขั้นตอนที่ 1>","<ขั้นตอนที่ 2>","<ขั้นตอนที่ 3>"],"steps_en":["<step 1>","<step 2>","<step 3>"]}],"email_recipients":[{"id":"R1","name":"ศูนย์เตือนภัยพิบัติแห่งชาติ ปภ.","email":"ndwc@disaster.go.th","type":"individual","name_en":"National Disaster Warning Center, DDPM"},{"id":"R2","name":"เจ้าหน้าที่เวร ปภ. เขต","email":"duty-officer@disaster.go.th","type":"individual","name_en":"DDPM Regional Duty Officer"},{"id":"R3","name":"ผู้ดูแลระบบ","email":"admin@disaster.go.th","type":"individual","name_en":"System Administrator"},{"id":"G1","name":"กลุ่มแจ้งเตือนดินถล่ม (Landslide Alert Group)","email":"landslide-alerts@disaster.go.th","type":"group","members":["R1","R2","R3"],"name_en":"Landslide Alert Group"}],"exports":[{"type":"CSV","dataset":"sensor_readings","filename":"readings_A4_2026-07.csv","tor":"§6.10.8"},{"type":"GeoTIFF","dataset":"susceptibility_layer","filename":"susceptibility_A4.tif","tor":"§6.10.8","note":"placeholder"},{"type":"JSON","dataset":"device_status","filename":"devices_all.json","tor":"§6.10.8"},{"type":"CAP-XML","dataset":"alert","filename":"AL-1001_cap12.xml","tor":"§6.10.7","cap_version":"1.2"},{"type":"PDF","dataset":"area_status_report","filename":"report_A4_2026-07-07.pdf","tor":"ภาคผนวก §1.7.4"}],"retention":{"policy_days":1825,"open_data_license":"CC BY 4.0","published":false,"tor":"§6.10.9"}};
+
+const SCREENS = {
+  overview:{icon:"▦",th:"ภาพรวม",en:"Overview",tor:"§6.10.2 · §1.7.1",feas:"native"},
+  area:{icon:"◈",th:"รายพื้นที่",en:"Area Detail",tor:"§6.10.2 · §1.7.6",feas:"native"},
+  map:{icon:"◉",th:"แผนที่",en:"Map",tor:"§6.10.2 · §1.7.3",feas:"native"},
+  graph:{icon:"◠",th:"กราฟแนวโน้ม",en:"Graph / Trends",tor:"§6.10.2 · §1.7.3",feas:"native"},
+  history:{icon:"⧗",th:"ข้อมูลย้อนหลัง",en:"Historical",tor:"§6.10.3 · §1.7.5",feas:"native"},
+  alerts:{icon:"⚑",th:"การแจ้งเตือน",en:"Alerts",tor:"§6.10.4 · §1.7.7",feas:"alerting"},
+  health:{icon:"❤",th:"สถานะอุปกรณ์",en:"Sensor Health",tor:"§6.10.10 · §1.7.6",feas:"native"},
+  auto:{icon:"⟳",th:"ตรวจสอบอัตโนมัติ",en:"Automated Monitoring",tor:"§6.11.1",feas:"alerting"},
+  email:{icon:"✉",th:"ตั้งค่าอีเมล",en:"Email Settings",tor:"§6.10.5 · §1.7.8",feas:"custom"},
+  export:{icon:"⤓",th:"ส่งออก & ส่งมอบ",en:"Export & Handover",tor:"§6.10.7-9 · §1.7.4",feas:"custom"},
+  wall:{icon:"▣",th:'จอ 75"',en:'75" Ops Wall',tor:"§1.8",feas:"alerting"}
+};
+const FEAS_LABEL={native:{th:"Grafana ในตัว",en:"Grafana-native"},alerting:{th:"Grafana Alerting/Kiosk",en:"Grafana Alerting/Kiosk"},custom:{th:"Custom shell (นอก Grafana)",en:"Custom shell (non-Grafana)"}};
+const NAVGROUPS=[
+  [{th:"ภาพรวม",en:"Overview"},["overview","area","map","graph","history"]],
+  [{th:"เฝ้าระวัง & แจ้งเตือน",en:"Monitoring & Alerts"},["alerts","health","auto"]],
+  [{th:"ตั้งค่า & ส่งมอบ",en:"Settings & Handover"},["email","export"]],
+  [{th:"จอปฏิบัติการ",en:"Operations Wall"},["wall"]]
+];
+
+let S={screen:"overview",authed:false,area:"all",hist:"hourly",atab:"landslide",navopen:false,mailTest:null,wallOpen:false,lang:"th",theme:"light"};
+
+const el=(h)=>{const t=document.createElement("template");t.innerHTML=h.trim();return t.content.firstChild};
+const $=(s,r=document)=>r.querySelector(s);
+const L=(th,en)=>S.lang==="th"?th:en;
+const nm=(o)=>S.lang==="th"?o.name_th:(o.name_en||o.name_th);
+const loc=()=>S.lang==="th"?"th-TH":"en-GB";
+const fmtTime=(iso)=>new Date(iso).toLocaleTimeString(loc(),{hour:"2-digit",minute:"2-digit"});
+const fmtDT=(iso)=>new Date(iso).toLocaleString(loc(),{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+const ago=(iso)=>{const m=Math.round((new Date(DATA.meta.now)-new Date(iso))/60000);return m<1?L("เมื่อสักครู่","just now"):m<60?m+L(" นาทีที่แล้ว"," min ago"):Math.round(m/60)+L(" ชม.ที่แล้ว"," h ago")};
+const lsev=(lvl)=>DATA.severity.landslide.find(x=>x.level===lvl);
+const SHAPES={normal:"●",watch:"◆",warning:"▲",danger:"⬣",info:"●",sywarning:"▲",critical:"■"};
+const sevText=(s)=>S.lang==="th"?s.th:s.en;
+const actText=(s)=>S.lang==="th"?s.action_th:s.action_en;
+
+function landToken(lvl){const s=lsev(lvl);return `<span class="tok ${lvl}"><span class="g">${SHAPES[lvl]}</span>${sevText(s)}</span>`;}
+function landTokenAction(lvl){const s=lsev(lvl);return landToken(lvl)+` <span class="action">→ ${actText(s)}</span>`;}
+function sysToken(lvl){const cls=lvl==="warning"?"sywarning":lvl;const s=DATA.severity.system.find(x=>x.level===lvl)||{th:lvl,en:lvl};return `<span class="tok ${cls}"><span class="g">${SHAPES[cls]}</span>${sevText(s)}</span>`;}
+
+const areaById=(id)=>DATA.areas.find(a=>a.id===id);
+const devsOf=(id)=>DATA.devices.filter(d=>id==="all"||d.area_id===id);
+const onlineCount=(id)=>devsOf(id).filter(d=>d.health.status==="online").length;
+const TYPE={master_station:{th:"สถานีแม่ข่าย (Master Station)",en:"Master Station"},
+  debris_flow_detector:{th:"เซนเซอร์ตรวจการไหลของมวลดิน (Debris Flow)",en:"Debris Flow Detector"},
+  rainfall_sensor:{th:"เซนเซอร์วัดน้ำฝน (Rainfall)",en:"Rainfall Sensor"},
+  warning_box:{th:"ตู้เตือนภัยหมู่บ้าน (Warning Box)",en:"Village Warning Box"}};
+
+function render(){
+  document.documentElement.setAttribute("data-theme",S.theme);
+  document.documentElement.lang=S.lang;
+  const app=$("#app");
+  if(!S.authed){app.innerHTML="";app.appendChild(renderLogin());return;}
+  app.innerHTML="";
+  app.appendChild(renderTop());
+  const shell=el(`<div class="shell"></div>`);
+  shell.appendChild(renderNav());
+  const main=el(`<div class="main"></div>`);
+  const content=el(`<div class="content"></div>`);
+  content.appendChild(renderScreen());
+  main.appendChild(content);
+  main.appendChild(renderAnnot());
+  shell.appendChild(main);
+  app.appendChild(shell);
+  if(S.screen==="wall"&&S.wallOpen){app.appendChild(renderWall());}
+}
+
+function langThemeToggles(){
+  const t=el(`<span style="display:inline-flex;gap:8px">
+    <span class="toggle" id="langt"><button data-l="th" class="${S.lang==="th"?"on":""}">ไทย</button><button data-l="en" class="${S.lang==="en"?"on":""}">EN</button></span>
+    <span class="toggle" id="themet"><button data-t="light" class="${S.theme==="light"?"on":""}">${L("สว่าง","Light")}</button><button data-t="dark" class="${S.theme==="dark"?"on":""}">${L("มืด","Dark")}</button></span>
+  </span>`);
+  t.querySelectorAll("#langt button").forEach(b=>b.onclick=()=>{S.lang=b.dataset.l;render();});
+  t.querySelectorAll("#themet button").forEach(b=>b.onclick=()=>{S.theme=b.dataset.t;render();});
+  return t;
+}
+
+function renderTop(){
+  const t=el(`<div class="topbar">
+    <button class="menutoggle" id="mt">☰</button>
+    <div class="brandmark">ปภ</div>
+    <div class="title">${L("ระบบเฝ้าระวังและเตือนภัยดินถล่ม IoT","IoT Landslide Monitoring & Warning")} <small>${L("กรมป้องกันและบรรเทาสาธารณภัย (DDPM)","Department of Disaster Prevention and Mitigation (DDPM)")}</small></div>
+    <div class="spacer"></div>
+    <div class="live"><span class="dot"></span> LIVE · ${L("อัปเดต","upd.")} ${fmtTime(DATA.meta.now)}</div>
+    <select class="areasel" id="areasel">
+      <option value="all">${L("ทุกพื้นที่","All areas")}</option>
+      ${DATA.areas.map(a=>`<option value="${a.id}" ${S.area===a.id?"selected":""}>${nm(a)} (${a.province})</option>`).join("")}
+    </select>
+    <span id="lt"></span>
+    <div class="usermenu" title="admin · §6.10.6">A</div>
+  </div>`);
+  t.querySelector("#lt").replaceWith(langThemeToggles());
+  t.querySelector("#areasel").onchange=(e)=>{S.area=e.target.value;render();};
+  t.querySelector("#mt").onclick=()=>{S.navopen=!S.navopen;render();};
+  return t;
+}
+
+function renderNav(){
+  const n=el(`<div class="nav ${S.navopen?"open":""}"></div>`);
+  NAVGROUPS.forEach(([g,keys])=>{
+    n.appendChild(el(`<div class="grp">${L(g.th,g.en)}</div>`));
+    keys.forEach(k=>{
+      const a=el(`<a class="${S.screen===k?"active":""}"><span class="ico">${SCREENS[k].icon}</span>${L(SCREENS[k].th,SCREENS[k].en)}</a>`);
+      a.onclick=()=>{S.screen=k;S.navopen=false;render();};
+      n.appendChild(a);
+    });
+  });
+  return n;
+}
+function renderAnnot(){
+  const m=SCREENS[S.screen];
+  return el(`<div class="annot">
+    <span>${L("ผูกกับ TOR:","TOR ref:")}</span><span class="tor">${m.tor}</span>
+    <span>${L("ความเป็นไปได้บน OSS Grafana:","OSS Grafana feasibility:")}</span><span class="feas ${m.feas}">${L(FEAS_LABEL[m.feas].th,FEAS_LABEL[m.feas].en)}</span>
+    <span class="spacer" style="flex:1"></span>
+    <span style="color:var(--faint)">${L("ต้นแบบคลิกได้ · ข้อมูลจำลอง · จัดสไตล์แบบ Grafana","Clickable prototype · static mock · Grafana-styled")}</span>
+  </div>`);
+}
+
+function renderScreen(){
+  switch(S.screen){
+    case "overview":return scrOverview();
+    case "area":return scrArea();
+    case "map":return scrMap();
+    case "graph":return scrGraph();
+    case "history":return scrHistory();
+    case "alerts":return scrAlerts();
+    case "health":return scrHealth();
+    case "auto":return scrAuto();
+    case "email":return scrEmail();
+    case "export":return scrExport();
+    case "wall":return scrWallPlaceholder();
+  }
+}
+
+function renderLogin(){
+  const w=el(`<div style="min-height:100vh;display:flex;flex-direction:column">
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-top" id="lt2"></div>
+        <div class="brandmark" style="width:34px;height:34px;font-size:15px">ปภ</div>
+        <h2>${L("เข้าสู่ระบบ","Sign in")} <span class="badge-native">Grafana-native</span></h2>
+        <p class="s">${L("ระบบเฝ้าระวังและเตือนภัยดินถล่ม IoT · DDPM","IoT Landslide Monitoring & Warning · DDPM")}<br>${L("กำหนดสิทธิด้วย Username / Password","Access control via Username / Password")} (§6.10.6 · §1.7.9)</p>
+        <label class="fld">${L("ชื่อผู้ใช้ (Username)","Username")}<input id="u" value="ddpm.admin"></label>
+        <label class="fld">${L("รหัสผ่าน (Password)","Password")}<input id="p" type="password" value="demo1234"></label>
+        <button class="btn primary" id="signin">${L("เข้าสู่ระบบ","Sign in")}</button>
+        <p class="note">${L("ต้นแบบ: การยืนยันตัวตนเป็นฟังก์ชันมาตรฐานของ Grafana OSS","Prototype: authentication is a standard Grafana OSS function")}</p>
+      </div>
+    </div></div>`);
+  w.querySelector("#lt2").replaceWith(langThemeToggles());
+  w.querySelector("#signin").onclick=()=>{S.authed=true;S.screen="overview";render();};
+  return w;
+}
+
+function scrOverview(){
+  const wrap=el(`<div></div>`);
+  const total=DATA.devices.length, online=onlineCount("all"), offline=total-online;
+  const activeAlerts=DATA.alerts.length;
+  const atRisk=DATA.areas.filter(a=>a.risk_level==="warning"||a.risk_level==="danger").length;
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("ภาพรวมระบบ","System Overview")}</h1><span class="sub">${L("สถานะปัจจุบัน · แยกตามพื้นที่","Current status · separated per area")} (§6.10.2 · §1.7.1)</span></div>`));
+  const evac=DATA.areas.find(a=>a.risk_level==="danger");
+  if(evac){wrap.appendChild(el(`<div class="panel" style="border-color:var(--red);margin-bottom:12px"><div class="pb" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+     ${landTokenAction("danger")} <b class="c-crit">${nm(evac)} (${evac.province})</b>
+     <span style="color:var(--muted)">— ${L("แจ้งเตือนสถานะอพยพ · ส่งอีเมลแล้ว","Evacuation alert · email sent")} ✓</span></div></div>`));}
+  const kpis=el(`<div class="grid kpis" style="margin-bottom:12px"></div>`);
+  kpis.appendChild(el(`<div class="panel kpi"><div class="pb"><div class="v ok">${online}<span style="font-size:15px;color:var(--muted)">/${total}</span></div><div class="l">${L("อุปกรณ์ออนไลน์","Devices online")}</div></div></div>`));
+  kpis.appendChild(el(`<div class="panel kpi"><div class="pb"><div class="v ${offline?"crit":""}">${offline}</div><div class="l">${L("อุปกรณ์ออฟไลน์","Devices offline")}</div></div></div>`));
+  kpis.appendChild(el(`<div class="panel kpi"><div class="pb"><div class="v ${activeAlerts?"warn":""}">${activeAlerts}</div><div class="l">${L("การแจ้งเตือนที่ทำงานอยู่","Active alerts")}</div></div></div>`));
+  kpis.appendChild(el(`<div class="panel kpi"><div class="pb"><div class="v ${atRisk?"warn":""}">${atRisk}<span style="font-size:15px;color:var(--muted)">/${DATA.areas.length}</span></div><div class="l">${L("พื้นที่เสี่ยง","Areas at risk")}</div></div></div>`));
+  wrap.appendChild(kpis);
+  const cards=el(`<div class="grid areacards"></div>`);
+  DATA.areas.forEach(a=>{
+    const on=onlineCount(a.id),tot=devsOf(a.id).length;
+    const c=el(`<div class="panel areacard"><div class="pb">
+      <div class="arow"><div><div class="aname">${nm(a)}</div><div class="aprov">${S.lang==="th"?a.name_en:a.name_th} · ${a.province}</div></div></div>
+      <div>${landTokenAction(a.risk_level)}</div>
+      <div class="arow"><span class="aprov">${L("อุปกรณ์ออนไลน์","Devices online")}</span><span>${on}/${tot}${a.devices_offline?` · <span class="c-crit">${L("ออฟไลน์","offline")} ${a.devices_offline}</span>`:""}</span></div>
+      <div class="mini"><i style="width:${Math.round(on/tot*100)}%;background:${a.devices_offline?"var(--yellow)":"var(--ok)"}"></i></div>
+      <div class="aprov">${L("แตะเพื่อดูรายละเอียด","Tap for details")} →</div>
+    </div></div>`);
+    c.onclick=()=>{S.area=a.id;S.screen="area";render();};
+    cards.appendChild(c);
+  });
+  wrap.appendChild(cards);
+  return wrap;
+}
+
+function scrArea(){
+  const wrap=el(`<div></div>`);
+  const a=areaById(S.area==="all"?DATA.areas[0].id:S.area);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${nm(a)}</h1><span class="sub">${S.lang==="th"?a.name_en:a.name_th} · ${a.province} · ${L("แยกตามพื้นที่","per area")} (§6.10.2)</span></div>`));
+  wrap.appendChild(el(`<div style="margin-bottom:12px">${landTokenAction(a.risk_level)}</div>`));
+  Object.keys(TYPE).forEach(tp=>{
+    const ds=DATA.devices.filter(d=>d.area_id===a.id&&d.type===tp);
+    if(!ds.length)return;
+    const p=el(`<div class="panel" style="margin-bottom:12px"><div class="ph">${L(TYPE[tp].th,TYPE[tp].en)} <span>${ds.length} ${L("ชุด","units")}</span></div>
+      <div class="pb" style="padding:0;overflow:auto"><table><thead><tr><th>${L("อุปกรณ์","Device")}</th><th>${L("สถานะ","Status")}</th><th>${L("ออนไลน์","Online")}</th><th>${L("แบตเตอรี่","Battery")}</th><th>${L("สัญญาณ","Signal")}</th><th>${L("อัปเดตล่าสุด","Last update")}</th></tr></thead><tbody></tbody></table></div></div>`);
+    const tb=p.querySelector("tbody");
+    ds.forEach(d=>{tb.appendChild(el(`<tr>
+      <td><div>${nm(d)}</div><div class="tid" style="color:var(--faint);font-size:11px">${d.id}</div></td>
+      <td><span class="status"><span class="sdot ${d.health.status}"></span>${d.health.status==="online"?L("ออนไลน์","Online"):L("ออฟไลน์","Offline")}</span></td>
+      <td>${d.health.online_rate}%</td><td>${battCell(d.health.battery)}</td><td>${sigBars(d.health.signal)}</td>
+      <td class="aprov">${ago(d.last_update)}</td></tr>`));});
+    wrap.appendChild(p);
+  });
+  return wrap;
+}
+function battCell(b){const c=b===0?"var(--crit)":b<=20?"var(--warn)":"var(--ok)";return `<span style="display:inline-flex;align-items:center;gap:6px"><span class="bar" style="width:54px"><i style="width:${b}%;background:${c}"></i></span>${b}%</span>`;}
+function sigBars(s){let h="";for(let i=1;i<=5;i++){h+=`<i class="${i<=s?"on":""}" style="height:${4+i*2}px"></i>`;}return `<span class="sig">${h}</span>`;}
+
+function scrMap(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("แผนที่สถานะอุปกรณ์","Device Status Map")}</h1><span class="sub">${L("สถานะเชิงพื้นที่แยกตามพื้นที่","Geospatial status per area")} (§6.10.2 · §1.7.3) · Geomap</span></div>`));
+  const ds=devsOf(S.area);
+  const lons=DATA.devices.map(d=>d.lon),lats=DATA.devices.map(d=>d.lat);
+  const lo=Math.min(...lons),hi=Math.max(...lons),la=Math.min(...lats),ha=Math.max(...lats);
+  const W=900,H=460,pad=54;
+  const X=(x)=>pad+(x-lo)/(hi-lo)*(W-2*pad);
+  const Y=(y)=>pad+(ha-y)/(ha-la)*(H-2*pad);
+  let pins="";
+  ds.forEach(d=>{const c=d.health.status==="offline"?"#f85149":d.type==="master_station"?"#58a6ff":"#3fb950";
+    const r=d.type==="master_station"?7:5;
+    pins+=`<circle cx="${X(d.lon).toFixed(1)}" cy="${Y(d.lat).toFixed(1)}" r="${r}" fill="${c}" stroke="#000" stroke-opacity=".4"><title>${nm(d)} (${d.id}) — ${d.health.status}</title></circle>`;
+    if(d.type==="master_station")pins+=`<circle cx="${X(d.lon).toFixed(1)}" cy="${Y(d.lat).toFixed(1)}" r="12" fill="none" stroke="#58a6ff" stroke-opacity=".5"/>`;
+  });
+  let labels="";DATA.areas.forEach(a=>{if(S.area!=="all"&&S.area!==a.id)return;labels+=`<text x="${X(a.lon).toFixed(1)}" y="${(Y(a.lat)-18).toFixed(1)}" fill="#9aa" font-size="12" text-anchor="middle">${nm(a)}</text>`;});
+  const grid=Array.from({length:9},(_,i)=>`<line x1="${pad+i*(W-2*pad)/8}" y1="${pad}" x2="${pad+i*(W-2*pad)/8}" y2="${H-pad}" stroke="#12261d"/>`).join("")+
+             Array.from({length:6},(_,i)=>`<line x1="${pad}" y1="${pad+i*(H-2*pad)/5}" x2="${W-pad}" y2="${pad+i*(H-2*pad)/5}" stroke="#12261d"/>`).join("");
+  wrap.appendChild(el(`<div class="panel"><div class="ph">${L("แผนผังพื้นที่ (schematic)","Schematic basemap")} <span>${ds.length} ${L("อุปกรณ์","devices")}</span></div>
+    <div class="pb"><div class="mapwrap"><svg viewBox="0 0 ${W} ${H}" width="100%">${grid}${pins}${labels}</svg></div>
+    <div class="legend"><span><span class="sdot online"></span>${L("ออนไลน์","Online")}</span><span><span class="sdot offline"></span>${L("ออฟไลน์","Offline")}</span><span><span class="sdot" style="background:#58a6ff"></span>${L("สถานีแม่ข่าย","Master Station")}</span></div>
+    <div class="note">${L("ต้นแบบ: ใช้ basemap แบบแผนผัง (ไม่มี live tiles) — บน Grafana ใช้ Geomap panel","Prototype: schematic basemap (no live tiles) — Grafana uses the Geomap panel")}</div></div></div>`));
+  return wrap;
+}
+
+function scrGraph(){
+  const wrap=el(`<div></div>`);
+  const a=areaById(S.area==="all"?"A4":S.area);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("กราฟแนวโน้ม","Trends")}</h1><span class="sub">${nm(a)} · ${L("48 ชั่วโมงล่าสุด","last 48 hours")} (§6.10.2 · §1.7.3)</span></div>`));
+  const h=DATA.history[a.id].hourly;
+  wrap.appendChild(chartPanel(L("ปริมาณน้ำฝน (mm) และความชื้นในดิน (%)","Rainfall (mm) & soil moisture (%)"),h.map(p=>p.t),[
+    {name:L("ฝน (mm)","Rain (mm)"),color:"#3f8ae0",vals:h.map(p=>p.rainfall_mm),area:true},
+    {name:L("ความชื้นดิน (%)","Soil moisture (%)"),color:"#e08b00",vals:h.map(p=>p.soil_moisture_pct)}
+  ],80,L("เส้นเกณฑ์อ้างอิง (แสดงผลเท่านั้น · คำนวณนอกขอบเขต UI · §6.7)","Reference threshold (display only · computed outside UI scope · §6.7)")));
+  return wrap;
+}
+function chartPanel(title,times,series,threshold,thNote){
+  const W=900,H=300,pad=40;
+  const allv=series.flatMap(s=>s.vals).concat(threshold?[threshold]:[]);
+  const mx=Math.max(...allv,1);const n=times.length;
+  const X=(i)=>pad+i/(n-1)*(W-2*pad);const Y=(v)=>H-pad-(v/mx)*(H-2*pad);
+  let svg="";
+  [0,.25,.5,.75,1].forEach(f=>{const y=H-pad-f*(H-2*pad);svg+=`<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="var(--border)"/><text x="6" y="${y+4}" fill="var(--faint)" font-size="10">${Math.round(mx*f)}</text>`;});
+  series.forEach(s=>{
+    const pts=s.vals.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    if(s.area){svg+=`<polygon points="${pad},${H-pad} ${pts} ${W-pad},${H-pad}" fill="${s.color}" fill-opacity=".12"/>`;}
+    svg+=`<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="1.8"/>`;
+  });
+  if(threshold){const y=Y(threshold);svg+=`<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#C62828" stroke-dasharray="5 4" stroke-width="1.3"/><text x="${W-pad-4}" y="${y-4}" fill="#C62828" font-size="10" text-anchor="end">threshold</text>`;}
+  const ticks=[0,Math.floor(n/2),n-1].map(i=>`<text x="${X(i)}" y="${H-pad+16}" fill="var(--faint)" font-size="10" text-anchor="middle">${fmtDT(times[i])}</text>`).join("");
+  const leg=series.map(s=>`<span style="color:${s.color}">■</span> ${s.name}`).join(" &nbsp; ");
+  return el(`<div class="panel"><div class="ph">${title}<span>${leg}</span></div><div class="pb"><svg viewBox="0 0 ${W} ${H}" width="100%">${svg}${ticks}</svg>${thNote?`<div class="note">${thNote}</div>`:""}</div></div>`);
+}
+
+function scrHistory(){
+  const wrap=el(`<div></div>`);
+  const a=areaById(S.area==="all"?"A4":S.area);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("ข้อมูลย้อนหลัง","Historical")}</h1><span class="sub">${nm(a)} · ${L("รายชั่วโมง/รายวัน/รายเดือน","hourly / daily / monthly")} (§6.10.3 · §1.7.5)</span></div>`));
+  const seg=el(`<div class="row" style="margin-bottom:12px;align-items:center">
+    <div class="seg">
+      <button data-m="hourly" class="${S.hist==="hourly"?"on":""}">${L("รายชั่วโมง","Hourly")}</button>
+      <button data-m="daily" class="${S.hist==="daily"?"on":""}">${L("รายวัน","Daily")}</button>
+      <button data-m="monthly" class="${S.hist==="monthly"?"on":""}">${L("รายเดือน","Monthly")}</button>
+    </div>
+    <input type="date" value="2026-07-07">
+    <span class="aprov">${L("เลือกช่วงวันที่ที่ต้องการแสดงผลได้","Select the date range to display")}</span></div>`);
+  seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{S.hist=b.dataset.m;render();});
+  wrap.appendChild(seg);
+  const H=DATA.history[a.id];
+  let times,vals,label;
+  if(S.hist==="hourly"){times=H.hourly.map(p=>p.t);vals=H.hourly.map(p=>p.rainfall_mm);label=L("ฝนรายชั่วโมง (mm)","Hourly rainfall (mm)");}
+  else if(S.hist==="daily"){times=H.daily.map(p=>p.date);vals=H.daily.map(p=>p.rainfall_mm);label=L("ฝนรายวัน (mm)","Daily rainfall (mm)");}
+  else{times=H.monthly.map(p=>p.month);vals=H.monthly.map(p=>p.rainfall_mm);label=L("ฝนรายเดือน (mm)","Monthly rainfall (mm)");}
+  wrap.appendChild(chartPanel(label,times,[{name:label,color:"#3f8ae0",vals,area:true}],null,null));
+  const tbl=el(`<div class="panel" style="margin-top:12px"><div class="ph">${L("ตารางข้อมูล","Data table")} <span>${vals.length} ${L("รายการ","rows")}</span></div><div class="pb" style="padding:0;max-height:260px;overflow:auto"><table><thead><tr><th>${L("เวลา","Time")}</th><th>${L("ปริมาณฝน (mm)","Rainfall (mm)")}</th></tr></thead><tbody></tbody></table></div></div>`);
+  const tb=tbl.querySelector("tbody");
+  times.forEach((t,i)=>tb.appendChild(el(`<tr><td>${S.hist==="hourly"?fmtDT(t):t}</td><td>${vals[i]}</td></tr>`)));
+  wrap.appendChild(tbl);
+  return wrap;
+}
+
+function scrAlerts(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("การแจ้งเตือน","Alerts")}</h1><span class="sub">${L("ระบบผิดปกติ + เสี่ยงดินถล่ม · บน Dashboard และอีเมล","System-abnormal + landslide-risk · on dashboard & email")} (§6.10.4 · §1.7.7)</span></div>`));
+  const tabs=el(`<div class="tabs">
+    <button data-t="landslide" class="${S.atab==="landslide"?"on":""}">${L("เสี่ยงดินถล่ม","Landslide-risk")}</button>
+    <button data-t="system" class="${S.atab==="system"?"on":""}">${L("ระบบผิดปกติ","System-abnormal")}</button></div>`);
+  tabs.querySelectorAll("button").forEach(b=>b.onclick=()=>{S.atab=b.dataset.t;render();});
+  wrap.appendChild(tabs);
+  const list=DATA.alerts.filter(x=>x.stream===S.atab);
+  const p=el(`<div class="panel"><div class="pb" style="padding:0;overflow:auto"><table><thead><tr><th>${L("ระดับ","Level")}</th><th>${L("พื้นที่ / อุปกรณ์","Area / Device")}</th><th>${L("รายละเอียด","Detail")}</th><th>${L("เวลา","Time")}</th><th>${L("อีเมล","Email")}</th><th></th></tr></thead><tbody></tbody></table></div></div>`);
+  const tb=p.querySelector("tbody");
+  if(!list.length)tb.appendChild(el(`<tr><td colspan="6" class="aprov" style="padding:18px">${L("ไม่มีการแจ้งเตือนในหมวดนี้","No alerts in this category")}</td></tr>`));
+  list.forEach(al=>{
+    const area=al.area_id?areaById(al.area_id):null;
+    const tokenHtml=al.stream==="landslide"?landToken(al.level):sysToken(al.level);
+    const cap=al.stream==="landslide"&&al.cap?`<div style="margin-top:4px"><span class="chip cap">CAP ${al.cap.severity}/${al.cap.urgency}</span></div>`:"";
+    const rb=al.runbook_case?`<button class="btn sm" data-rb="${al.runbook_case}">Runbook ${al.runbook_case} →</button>`:"";
+    const tr=el(`<tr>
+      <td>${tokenHtml}${cap}</td>
+      <td>${area?nm(area):"—"}${al.device_id?`<div class="tid" style="color:var(--faint);font-size:11px">${al.device_id}</div>`:""}</td>
+      <td>${L(al.title_th,al.title_en)}<div class="aprov">${L(al.message_th,al.message_en)}</div></td>
+      <td class="aprov">${fmtDT(al.timestamp)}</td>
+      <td>${al.email_sent?`<span class="mailflag">✓ ${L("ส่งแล้ว","Sent")}</span>`:`<span class="mailflag no">— ${L("ไม่ส่ง","None")}</span>`}</td>
+      <td>${rb}</td></tr>`);
+    const b=tr.querySelector("[data-rb]");if(b)b.onclick=()=>openRunbook(b.dataset.rb);
+    tb.appendChild(tr);
+  });
+  wrap.appendChild(p);
+  return wrap;
+}
+
+function scrHealth(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("สถานะอุปกรณ์แบบเรียลไทม์","Real-time Sensor Health")}</h1><span class="sub">${L("อัตราออนไลน์ · แบตเตอรี่ · สัญญาณ","Online rate · battery · signal")} (§6.10.10) <span class="live" style="display:inline-flex"><span class="dot"></span>LIVE</span></span></div>`));
+  let ds=devsOf(S.area).slice();
+  const rank=(d)=>d.health.status==="offline"?0:d.health.battery<=20?1:d.health.signal<=1?2:3;
+  ds.sort((a,b)=>rank(a)-rank(b));
+  const on=ds.filter(d=>d.health.status==="online").length;
+  const warn=ds.filter(d=>d.health.status==="online"&&(d.health.battery<=20||d.health.signal<=1)).length;
+  const off=ds.filter(d=>d.health.status==="offline").length;
+  wrap.appendChild(el(`<div class="row" style="margin-bottom:12px">
+    <span class="chip c-ok" style="border-color:var(--ok)">${L("ออนไลน์","Online")} ${on}</span>
+    <span class="chip c-warn" style="border-color:var(--warn)">${L("เฝ้าระวัง","Warning")} ${warn}</span>
+    <span class="chip c-crit" style="border-color:var(--crit)">${L("ออฟไลน์","Offline")} ${off}</span></div>`));
+  const g=el(`<div class="grid tiles"></div>`);
+  ds.forEach(d=>{
+    const off=d.health.status==="offline";
+    const bc=d.health.battery===0?"var(--crit)":d.health.battery<=20?"var(--warn)":"var(--ok)";
+    const border=off?"var(--crit)":(d.health.battery<=20||d.health.signal<=1)?"var(--warn)":"var(--border)";
+    g.appendChild(el(`<div class="panel tile" style="border-color:${border}"><div class="pb">
+      <div class="arow"><div><div class="tname">${nm(d)}</div><div class="tid">${d.id}</div></div><span class="status"><span class="sdot ${d.health.status}"></span></span></div>
+      <div class="metric"><span>${L("ออนไลน์","Online")}</span><span class="bar"><i style="width:${d.health.online_rate}%;background:${off?"var(--crit)":"var(--ok)"}"></i></span><span class="mv">${d.health.online_rate}%</span></div>
+      <div class="metric"><span>${L("แบตเตอรี่","Battery")}</span><span class="bar"><i style="width:${d.health.battery}%;background:${bc}"></i></span><span class="mv">${d.health.battery}%</span></div>
+      <div class="metric"><span>${L("สัญญาณ","Signal")}</span><span style="flex:1"></span>${sigBars(d.health.signal)}<span class="mv" style="margin-left:8px">${d.health.signal}/5</span></div>
+      <div class="arow aprov"><span>${powLabel(d.health.power)}</span><span>${ago(d.last_update)}</span></div>
+    </div></div>`));
+  });
+  wrap.appendChild(g);
+  return wrap;
+}
+function powLabel(p){return p==="solar-fault"?L("⚠ โซลาร์ขัดข้อง","⚠ Solar fault"):p==="solar-weak"?L("โซลาร์ต่ำ","Solar low"):L("โซลาร์ปกติ","Solar OK");}
+
+function scrAuto(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("ตรวจสอบอัตโนมัติ (Automated Monitoring)","Automated Monitoring")}</h1><span class="sub">${L("ตรวจสอบทุกอุปกรณ์ต่อเนื่อง แจ้งเตือนอัตโนมัติ ไม่ต้องมีเจ้าหน้าที่เฝ้าตลอดเวลา","Continuous checks on every device, auto-alerts, no constant staff watching")} (§6.11.1)</span></div>`));
+  wrap.appendChild(el(`<div class="row" style="margin-bottom:12px;align-items:center"><span class="live" style="display:inline-flex"><span class="dot"></span>${L("กำลังตรวจสอบอัตโนมัติ · รอบถัดไปใน 30 วินาที","Auto-checking · next cycle in 30s")}</span></div>`));
+  const log=el(`<div class="panel" style="margin-bottom:12px"><div class="ph">${L("บันทึกการแจ้งเตือนอัตโนมัติ — หลักฐานว่าระบบทำงานเอง","Auto-alert log — proof the automation fired")}</div>
+    <div class="pb" style="padding:0;overflow:auto"><table><thead><tr><th>${L("ประเภทตรวจ","Check")}</th><th>${L("อุปกรณ์/พื้นที่","Device / Area")}</th><th>${L("ผล","Result")}</th><th>${L("ช่องทาง","Channel")}</th><th>${L("เวลา","Time")}</th><th></th></tr></thead><tbody></tbody></table></div></div>`);
+  const tb=log.querySelector("tbody");
+  DATA.auto_monitor_log.forEach(l=>{
+    const res=l.result==="fault"||l.result==="critical"?`<span class="c-crit">${l.result}</span>`:l.result==="warning"?`<span class="c-warn">${l.result}</span>`:`<span class="c-ok">${l.result}</span>`;
+    const target=l.device_id||(l.area_id?nm(areaById(l.area_id)):"—");
+    const rb=(l.result==="fault")?`<button class="btn sm" data-rb="RB-01">Runbook →</button>`:"";
+    const tr=el(`<tr><td>${l.check}</td><td>${target}<div class="aprov">${l.detail}</div></td><td>${res}</td><td><span class="chip">${l.channel}</span></td><td class="aprov">${fmtDT(l.timestamp)}</td><td>${rb}</td></tr>`);
+    const b=tr.querySelector("[data-rb]");if(b)b.onclick=()=>openRunbook(b.dataset.rb);
+    tb.appendChild(tr);
+  });
+  wrap.appendChild(log);
+  const board=el(`<div class="panel"><div class="ph">${L("กระดานตรวจสอบต่อเนื่อง","Continuous-check board")}<span>${DATA.devices.length} ${L("อุปกรณ์","devices")}</span></div>
+    <div class="pb" style="padding:0;max-height:340px;overflow:auto"><table><thead><tr><th>${L("อุปกรณ์","Device")}</th><th>${L("พื้นที่","Area")}</th><th>${L("ผลตรวจล่าสุด","Last check")}</th><th>${L("ตรวจเมื่อ","Checked")}</th></tr></thead><tbody></tbody></table></div></div>`);
+  const bb=board.querySelector("tbody");
+  DATA.devices.forEach(d=>{
+    const r=d.health.status==="offline"?`<span class="c-crit">fault</span>`:(d.health.battery<=20||d.health.signal<=1)?`<span class="c-warn">warning</span>`:`<span class="c-ok">OK</span>`;
+    bb.appendChild(el(`<tr><td>${d.id}</td><td>${nm(areaById(d.area_id))}</td><td>${r}</td><td class="aprov">${ago(d.last_update)}</td></tr>`));
+  });
+  wrap.appendChild(board);
+  return wrap;
+}
+
+function scrEmail(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("ตั้งค่าการแจ้งเตือนทางอีเมล","Email Alert Settings")}</h1><span class="sub">${L("ผู้รับ/กลุ่มอีเมลที่ ปภ. กำหนด","DDPM-specified recipients / groups")} (§6.10.5 · §1.7.8)</span></div>`));
+  const p=el(`<div class="panel" style="margin-bottom:12px"><div class="ph">${L("ผู้รับอีเมล","Recipients")}<button class="btn sm">+ ${L("เพิ่มผู้รับ","Add recipient")}</button></div>
+    <div class="pb" style="padding:0;overflow:auto"><table><thead><tr><th>${L("ชื่อ","Name")}</th><th>${L("อีเมล","Email")}</th><th>${L("ประเภท","Type")}</th></tr></thead><tbody></tbody></table></div></div>`);
+  const tb=p.querySelector("tbody");
+  DATA.email_recipients.forEach(r=>tb.appendChild(el(`<tr><td>${S.lang==="th"?r.name:(r.name_en||r.name)}</td><td>${r.email}</td><td><span class="chip">${r.type==="group"?L("กลุ่ม","Group"):L("บุคคล","Individual")}</span></td></tr>`)));
+  wrap.appendChild(p);
+  const routing=el(`<div class="panel" style="margin-bottom:12px"><div class="ph">${L("การกำหนดเส้นทางแจ้งเตือน","Alert routing")}</div><div class="pb">
+    <div class="row">
+      <label class="fld">${L('เมื่อ "เสี่ยงดินถล่ม ≥ เตือนภัย"','When "landslide-risk ≥ Warning"')}<select><option>${L("กลุ่มแจ้งเตือนดินถล่ม","Landslide Alert Group")}</option></select></label>
+      <label class="fld">${L('เมื่อ "ระบบผิดปกติ (Critical)"','When "system-abnormal (Critical)"')}<select><option>${L("ผู้ดูแลระบบ + เจ้าหน้าที่เวร","Admin + Duty Officer")}</option></select></label>
+    </div></div></div>`);
+  wrap.appendChild(routing);
+  const test=el(`<div class="panel"><div class="pb" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <button class="btn primary" id="testbtn">${L("ส่งอีเมลทดสอบ","Send test email")}</button>
+    <span id="teststate" class="aprov">${S.mailTest==="sent"?`<span class="mailflag">✓ ${L("ส่งอีเมลทดสอบสำเร็จ — 4 ผู้รับ","Test email sent — 4 recipients")}</span>`:S.mailTest==="sending"?L("กำลังส่ง...","Sending..."):L("เชื่อมต่อกับอีเมล ปภ. แล้ว","Connected to DDPM email")}</span>
+    <span class="feas custom" style="margin-left:auto">${L("บน Grafana: contact points (admin) หรือ custom shell","Grafana: contact points (admin) or custom shell")}</span></div></div>`);
+  test.querySelector("#testbtn").onclick=()=>{S.mailTest="sending";render();setTimeout(()=>{S.mailTest="sent";render();},700);};
+  wrap.appendChild(test);
+  return wrap;
+}
+
+function scrExport(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("ส่งออก & ส่งมอบข้อมูล","Export & Data Handover")}</h1><span class="sub">PDF · CAP-XML · Open Standard · Data Retention (§6.10.7-9 · §1.7.4)</span></div>`));
+  const grid=el(`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))"></div>`);
+  const alertMsg=L("ต้นแบบ: สร้างรายงาน PDF (report_A4_2026-07-07.pdf) — Grafana OSS ไม่มี PDF ในตัว ต้องใช้ add-on/บริการภายนอก","Prototype: generate PDF (report_A4_2026-07-07.pdf) — Grafana OSS has no native PDF; needs an add-on/external service");
+  const pdf=el(`<div class="panel"><div class="ph">${L("ส่งออกรายงาน PDF","PDF report export")} <span class="feas custom">custom</span></div><div class="pb">
+    <div class="row"><label class="fld">${L("พื้นที่","Area")}<select>${DATA.areas.map(a=>`<option>${nm(a)}</option>`).join("")}</select></label>
+    <label class="fld">${L("วันที่","Date")}<input type="date" value="2026-07-07"></label></div>
+    <button class="btn primary" id="pdfbtn" style="margin-top:10px">${L("สร้าง PDF","Generate PDF")} (§1.7.4)</button>
+    <div class="note">${L("Grafana OSS ไม่รองรับ PDF ในตัว — ต้องใช้ตัวเสริม/บริการเรนเดอร์ภายนอก","Grafana OSS has no native PDF — needs a plugin/external renderer")}</div></div></div>`);
+  pdf.querySelector("#pdfbtn").onclick=()=>alert(alertMsg);
+  grid.appendChild(pdf);
+  const capAlert=DATA.alerts.find(a=>a.stream==="landslide");
+  grid.appendChild(el(`<div class="panel"><div class="ph">${L("ส่งออก CAP-XML (v1.2)","CAP-XML export (v1.2)")} <span class="feas custom">custom</span></div><div class="pb">
+    <label class="fld">${L("เลือกการแจ้งเตือน","Select alert")}<select><option>${capAlert.id} — ${L(capAlert.title_th,capAlert.title_en)}</option></select></label>
+    <button class="btn primary" style="margin:10px 0" id="capbtn">${L("แสดง/ดาวน์โหลด CAP-XML","Show / download CAP-XML")} (§6.10.7)</button>
+    <pre id="cappre" style="display:none;background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;overflow:auto;max-height:220px"></pre>
+    <div class="note">${L("Grafana Alerting ไม่มี CAP ในตัว — ต้องมี webhook แปลงเป็น CAP-XML","Grafana Alerting has no CAP — needs a webhook to transform to CAP-XML")}</div></div></div>`));
+  grid.appendChild(el(`<div class="panel"><div class="ph">${L("ส่งมอบ Open Standard","Open-Standard handover")} <span class="feas native">CSV native</span></div><div class="pb" style="padding:0;overflow:auto">
+    <table><thead><tr><th>${L("ชุดข้อมูล","Dataset")}</th><th>${L("รูปแบบ","Format")}</th></tr></thead><tbody>
+    ${DATA.exports.filter(e=>["CSV","GeoTIFF","JSON"].includes(e.type)).map(e=>`<tr><td>${e.dataset}</td><td><button class="btn sm">${e.type}${e.type!=="CSV"?" · custom":""}</button></td></tr>`).join("")}
+    </tbody></table></div></div>`));
+  grid.appendChild(el(`<div class="panel"><div class="ph">${L("นโยบายเก็บข้อมูล & Open Data","Retention & Open Data")} (§6.10.9)</div><div class="pb">
+    <label class="fld">${L("ระยะเวลาเก็บข้อมูล (วัน)","Retention period (days)")}<input type="number" value="${DATA.retention.policy_days}"></label>
+    <div class="row" style="margin-top:10px;align-items:center"><input type="checkbox"> <span>${L("เผยแพร่เป็น Open Data ภายใต้","Publish as Open Data under")} ${DATA.retention.open_data_license} ${L("(สถาบันวิจัย/มหาวิทยาลัย)","(research/universities)")}</span></div></div></div>`));
+  wrap.appendChild(grid);
+  const b=wrap.querySelector("#capbtn");
+  b.onclick=()=>{const pre=wrap.querySelector("#cappre");pre.style.display="block";pre.textContent=capXML(capAlert);};
+  return wrap;
+}
+function capXML(al){const s=lsev(al.level);return `<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>${al.id}</identifier>
+  <sender>ddpm.landslide@disaster.go.th</sender>
+  <sent>${al.timestamp}+07:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>th-TH</language>
+    <category>Geo</category>
+    <event>Landslide / ดินถล่ม</event>
+    <urgency>${al.cap.urgency}</urgency>
+    <severity>${al.cap.severity}</severity>
+    <certainty>${al.cap.certainty}</certainty>
+    <headline>${al.title_th}</headline>
+    <description>${al.message_th}</description>
+    <instruction>${s.action_th}</instruction>
+    <areaDesc>${areaById(al.area_id).name_th}, ${areaById(al.area_id).province}</areaDesc>
+  </info>
+</alert>`;}
+
+function openRunbook(cid){
+  const c=DATA.runbook.find(x=>x.case_id===cid)||DATA.runbook[0];
+  const scrim=el(`<div class="scrim"></div>`);
+  const steps=S.lang==="th"?c.steps_th:(c.steps_en||c.steps_th);
+  const dr=el(`<div class="drawer"><div class="dh"><div><b>Runbook ${c.case_id}</b><div class="aprov">${L(c.title_th,c.title_en)}</div></div><button class="btn sm" id="cl">${L("ปิด","Close")} ✕</button></div>
+    <div class="db"><div class="aprov" style="margin-bottom:10px">${L("คู่มือแก้ปัญหาแบบทีละขั้น สำหรับเจ้าหน้าที่ที่ไม่ใช่วิศวกร","Step-by-step guide for non-engineer staff")} (§6.11.3)</div></div></div>`);
+  const db=dr.querySelector(".db");
+  steps.forEach((s,i)=>db.appendChild(el(`<div class="step"><div class="n">${i+1}</div><div>${s}</div></div>`)));
+  const close=()=>{scrim.remove();dr.remove();};
+  scrim.onclick=close;dr.querySelector("#cl").onclick=close;
+  document.body.appendChild(scrim);document.body.appendChild(dr);
+}
+
+function scrWallPlaceholder(){
+  const wrap=el(`<div></div>`);
+  wrap.appendChild(el(`<div class="pagehead"><h1>${L("จอภาพรวม 75″ (Ops Wall)",'75" Ops Wall')}</h1><span class="sub">4K 3840×2160 · ≥60Hz · ${L("ไม่ต้องมีคนเฝ้า","unattended")} (§1.8) · Grafana kiosk + playlist</span></div>`));
+  const p=el(`<div class="panel"><div class="pb"><p>${L("มุมมองเต็มจอสำหรับห้องปฏิบัติการ — อ่านได้ระยะไกล ไม่พึ่ง hover ไม่ต้องโต้ตอบ รีเฟรชอัตโนมัติ","Full-screen ops-room view — glanceable at distance, no hover, no interaction, auto-refresh")}</p>
+    <button class="btn primary" id="openwall">${L("เปิดมุมมองจอ 75″ (เต็มจอ)",'Open 75" wall (full screen)')} →</button>
+    <div class="note">${L("บน Grafana ใช้ Playlist + Kiosk mode (?kiosk) บนจอ 4K","Grafana: Playlist + Kiosk mode (?kiosk) on a 4K screen")}</div></div></div>`);
+  p.querySelector("#openwall").onclick=()=>{S.wallOpen=true;render();};
+  wrap.appendChild(p);
+  return wrap;
+}
+function renderWall(){
+  const w=el(`<div class="wall"><div class="wtop"><h1>${L("ระบบเฝ้าระวังและเตือนภัยดินถล่ม — ภาพรวม","Landslide Monitoring & Warning — Overview")}</h1><div class="wclock"><span class="dot" style="display:inline-block"></span> LIVE · ${new Date(DATA.meta.now).toLocaleString(loc())}</div></div></div>`);
+  const evac=DATA.areas.find(a=>a.risk_level==="danger");
+  if(evac)w.appendChild(el(`<div class="wbanner">⬣ ${L("สถานะอพยพ","EVACUATE")} — ${nm(evac)} (${evac.province}) · ${L("อพยพทันที · ส่งอีเมลแล้ว","Evacuate now · email sent")}</div>`));
+  const g=el(`<div class="wgrid"></div>`);
+  const colors={normal:"#2E7D32",watch:"#F9A825",warning:"#EF6C00",danger:"#C62828"};
+  DATA.areas.forEach(a=>{const s=lsev(a.risk_level);const on=onlineCount(a.id),tot=devsOf(a.id).length;
+    g.appendChild(el(`<div class="wcard" style="border-color:${colors[a.risk_level]}">
+      <div class="wname">${nm(a)} <span style="font-size:18px;color:#888">${a.province}</span></div>
+      <div class="wtok" style="background:${colors[a.risk_level]}22;color:${colors[a.risk_level]};border:2px solid ${colors[a.risk_level]}">${SHAPES[a.risk_level]} ${sevText(s)}</div>
+      <div class="waction" style="color:${colors[a.risk_level]}">→ ${actText(s)}</div>
+      <div class="wstat"><span>${L("อุปกรณ์","Devices")} ${on}/${tot}</span>${a.devices_offline?`<span style="color:#f85149">${L("ออฟไลน์","offline")} ${a.devices_offline}</span>`:`<span style="color:#3fb950">${L("ปกติ","OK")}</span>`}</div>
+    </div>`));});
+  w.appendChild(g);
+  w.appendChild(el(`<div style="text-align:center"><button class="btn" id="exitwall">✕ ${L("ออกจากมุมมองจอ 75″",'Exit 75" wall')}</button></div>`));
+  w.querySelector("#exitwall").onclick=()=>{S.wallOpen=false;render();};
+  return w;
+}
+
+render();
+</script>
+</body>
+</html>
